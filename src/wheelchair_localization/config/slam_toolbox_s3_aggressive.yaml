@@ -1,0 +1,119 @@
+slam_toolbox:
+  ros__parameters:
+    # ROS Parameters
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+    scan_topic: /scan
+    use_map_saver: true
+    mode: mapping
+
+    # Solver Parameters
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None
+
+    # ============================================================================
+    # RPLIDAR S3 AGGRESSIVE CONFIGURATION
+    # ============================================================================
+    # For environments with EXCELLENT features (warehouses, structured spaces)
+    # Uses maximum S3 capabilities - may be unstable in feature-poor areas
+    # Start with s3_optimized.yaml first, use this only if that works well
+    # ============================================================================
+
+    debug_logging: false
+    throttle_scans: 1
+    transform_publish_period: 0.02
+
+    # AGGRESSIVE: Fast map updates using S3's 20Hz
+    map_update_interval: 1.0  # Update every second (5x faster than bumperbot)
+
+    resolution: 0.05
+
+    # AGGRESSIVE: Use more of S3's range (but still not full 40m)
+    max_laser_range: 25.0  # 2x A1 range, quality threshold for S3
+
+    # AGGRESSIVE: Process scans faster with S3's 20Hz rate
+    minimum_time_interval: 0.2  # 20ms, matching S3's 50ms scan period
+
+    transform_timeout: 0.2
+    tf_buffer_duration: 30.0
+    stack_size_to_use: 40000000
+    enable_interactive_mode: true
+
+    # AGGRESSIVE: Maximum queue for S3's dense data
+    scan_queue_size: 30
+
+    # ============================================================================
+    # AGGRESSIVE MOVEMENT THRESHOLDS
+    # ============================================================================
+    # ONLY use these in feature-rich environments!
+    # If map quality degrades, increase these values
+    # ============================================================================
+
+    use_scan_matching: true
+    use_scan_barycenter: true
+
+    # AGGRESSIVE: Tighter thresholds for responsive mapping
+    # WARNING: May fail in featureless areas (blank walls, long corridors)
+    minimum_travel_distance: 0.25  # Half of bumperbot, minimum stable for S3
+    minimum_travel_heading: 0.25   # ~14°, minimum stable rotation threshold
+
+    # AGGRESSIVE: Maximum buffer for S3's dense scans
+    scan_buffer_size: 25  # 2.5x bumperbot
+    scan_buffer_maximum_scan_distance: 20.0  # 2x bumperbot
+
+    link_match_minimum_response_fine: 0.08  # More permissive for frequent updates
+    link_scan_maximum_distance: 2.5  # Larger search area
+
+    # ============================================================================
+    # AGGRESSIVE LOOP CLOSURE - Maximum S3 range utilization
+    # ============================================================================
+    do_loop_closing: true
+
+    # AGGRESSIVE: Use S3's excellent long-range accuracy
+    loop_search_maximum_distance: 12.0  # 4x bumperbot, near S3's optimal range
+
+    loop_match_minimum_chain_size: 8   # Shorter chains for faster closure
+    loop_match_maximum_variance_coarse: 3.5  # More permissive
+    loop_match_minimum_response_coarse: 0.3  # Lower threshold
+    loop_match_minimum_response_fine: 0.4    # Lower threshold
+
+    # ============================================================================
+    # AGGRESSIVE CORRELATION - Maximum S3 capabilities
+    # ============================================================================
+
+    correlation_search_space_dimension: 1.2  # Large search using S3 density
+    correlation_search_space_resolution: 0.01
+    correlation_search_space_smear_deviation: 0.06  # Tight for S3's accuracy
+
+    # ============================================================================
+    # AGGRESSIVE LOOP SEARCH - Maximum range
+    # ============================================================================
+
+    loop_search_space_dimension: 18.0  # 2.25x bumperbot, leveraging S3's 20m+ range
+    loop_search_space_resolution: 0.05
+    loop_search_space_smear_deviation: 0.03
+
+    # Scan Matcher Parameters
+    distance_variance_penalty: 0.5
+    angle_variance_penalty: 1.0
+
+    fine_search_angle_offset: 0.00349
+    coarse_search_angle_offset: 0.349
+    coarse_angle_resolution: 0.0349
+    minimum_angle_penalty: 0.9
+    minimum_distance_penalty: 0.5
+    use_response_expansion: true
+
+    # QoS OVERRIDES
+    qos_overrides:
+      /scan:
+        subscription:
+          reliability: reliable
+          history: keep_last
+          depth: 15  # Higher for aggressive scan rate
+          durability: volatile

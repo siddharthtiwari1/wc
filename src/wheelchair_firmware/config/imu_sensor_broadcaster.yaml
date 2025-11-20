@@ -1,0 +1,10 @@
+controller_manager:
+  ros__parameters:
+    imu_sensor_broadcaster:
+      type: imu_sensor_broadcaster/IMUSensorBroadcaster
+
+imu_sensor_broadcaster:
+  ros__parameters:
+    sensor_name: imu
+    frame_id: camera_link  # Frame where IMU is mounted
+    topic_name: ~/imu  # Will publish to /imu_sensor_broadcaster/imu

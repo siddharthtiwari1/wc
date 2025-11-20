@@ -1,0 +1,34 @@
+# ROS 2 build artifacts
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data and log files
+*.csv
+*.bag
+*.db3
+*.log
+*.pdf
+*.gv
+
+# Temporary files
+*.tmp
+*.bak
