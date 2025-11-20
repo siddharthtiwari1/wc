@@ -1,0 +1,123 @@
+slam_toolbox:
+  ros__parameters:
+    # ROS Parameters
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+    scan_topic: /scan
+    use_map_saver: true
+    mode: mapping
+
+    # Solver Parameters
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None
+
+    # ============================================================================
+    # RPLIDAR S3 - WHITE WALL OPTIMIZED (EXTENDED RANGE)
+    # ============================================================================
+    # For: Offices, hospitals, painted indoor spaces with white/light walls
+    #
+    # Per S3 datasheet: 40m range with 70% reflectivity (white objects)
+    # This config pushes range to 30-35m to leverage white-wall environments
+    #
+    # Use this config when:
+    #   ✓ Environment is mostly white/light colored walls
+    #   ✓ Large open spaces (warehouses, gymnasiums, halls)
+    #   ✓ You want maximum loop closure distance
+    #
+    # DON'T use if:
+    #   ✗ Environment has many dark surfaces
+    #   ✗ You see noise in scans beyond 25m
+    #   ✗ Outdoor/variable lighting
+    # ============================================================================
+
+    debug_logging: false
+    throttle_scans: 1
+    transform_publish_period: 0.02
+
+    map_update_interval: 0.5
+    resolution: 0.03
+
+    # EXTENDED RANGE for white walls (per datasheet: 40m @ 70% reflectivity)
+    max_laser_range: 30.0  # Aggressive range for white-wall environments
+
+    # Match S3's 10Hz typical scan rate
+    minimum_time_interval: 0.1
+
+    transform_timeout: 0.2
+    tf_buffer_duration: 30.0
+    stack_size_to_use: 40000000
+    enable_interactive_mode: true
+
+    scan_queue_size: 30
+
+    # ============================================================================
+    # MOVEMENT THRESHOLDS - Same as S3 Pro (fixes turns)
+    # ============================================================================
+
+    use_scan_matching: true
+    use_scan_barycenter: true
+
+    minimum_travel_distance: 0.2
+    minimum_travel_heading: 0.17  # 10° rotation threshold
+
+    scan_buffer_size: 30
+    scan_buffer_maximum_scan_distance: 25.0  # Extended for long-range scans
+
+    link_match_minimum_response_fine: 0.12
+    link_scan_maximum_distance: 3.0
+
+    # ============================================================================
+    # EXTENDED LOOP CLOSURE - Use white-wall range advantage
+    # ============================================================================
+    do_loop_closing: true
+
+    # AGGRESSIVE loop closure with extended range
+    loop_search_maximum_distance: 20.0  # 33% larger than S3 Pro (was 15m)
+    loop_match_minimum_chain_size: 10
+    loop_match_maximum_variance_coarse: 3.0
+    loop_match_minimum_response_coarse: 0.40
+    loop_match_minimum_response_fine: 0.50
+
+    # ============================================================================
+    # CORRELATION SEARCH - Handle fast motion
+    # ============================================================================
+
+    correlation_search_space_dimension: 1.5
+    correlation_search_space_resolution: 0.01
+    correlation_search_space_smear_deviation: 0.06
+
+    # ============================================================================
+    # EXTENDED LOOP CLOSURE SEARCH SPACE
+    # ============================================================================
+
+    loop_search_space_dimension: 20.0  # Larger search area (was 18.0)
+    loop_search_space_resolution: 0.05
+    loop_search_space_smear_deviation: 0.03
+
+    # Scan Matcher Parameters
+    distance_variance_penalty: 0.5
+    angle_variance_penalty: 1.0
+
+    # Match S3's 0.1125° angular resolution
+    fine_search_angle_offset: 0.00196
+    coarse_search_angle_offset: 0.349
+    coarse_angle_resolution: 0.0349
+
+    minimum_angle_penalty: 0.9
+    minimum_distance_penalty: 0.5
+
+    use_response_expansion: true
+
+    # QoS OVERRIDES
+    qos_overrides:
+      /scan:
+        subscription:
+          reliability: reliable
+          history: keep_last
+          depth: 20
+          durability: volatile

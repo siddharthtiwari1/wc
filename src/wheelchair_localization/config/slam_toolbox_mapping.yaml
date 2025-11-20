@@ -1,0 +1,156 @@
+###########################################################
+# SLAM Toolbox Mapping Configuration for RPLidar S3
+###########################################################
+# Optimized for wheelchair/bumperbot with differential drive
+# RPLidar S3 specs: 25m range, 16000 samples/s, 0.25° angular resolution
+# Use this config to CREATE maps, then switch to AMCL for localization
+
+slam_toolbox:
+  ros__parameters:
+    # ====================================================================
+    # CORE SLAM PARAMETERS
+    # ====================================================================
+
+    # Coordinate frames (REP-105 compliant)
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+
+    # Input/output topics
+    scan_topic: /scan
+    use_map_saver: true
+
+    # MODE: mapping (create new map) vs localization (use existing map)
+    mode: mapping
+
+    # ====================================================================
+    # SOLVER CONFIGURATION (Ceres for accurate optimization)
+    # ====================================================================
+
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY  # Fast and accurate for 2D SLAM
+    ceres_preconditioner: SCHUR_JACOBI            # Good convergence
+    ceres_trust_strategy: LEVENBERG_MARQUARDT     # Robust optimization
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None                     # Use HuberLoss for noisy environments
+
+    # ====================================================================
+    # SCAN MATCHING PARAMETERS (tuned for RPLidar S3)
+    # ====================================================================
+
+    # Enable scan matching for accurate pose estimation
+    use_scan_matching: true
+    use_scan_barycenter: true  # Use center of scan for better matching
+
+    # Movement thresholds - when to process new scans
+    # Lower values = more frequent updates = better accuracy but more CPU
+    minimum_travel_distance: 0.15  # meters (tuned for indoor wheelchair navigation)
+    minimum_travel_heading: 0.15   # radians (~8.6 degrees) - good for turns
+
+    # Scan buffer management
+    scan_buffer_size: 20                      # Keep more scans for better loop closure
+    scan_buffer_maximum_scan_distance: 15.0   # RPLidar S3 effective range
+
+    # Scan matching quality thresholds
+    link_match_minimum_response_fine: 0.2     # Higher = more selective matching
+    link_scan_maximum_distance: 2.0           # Max distance between consecutive scans
+
+    # ====================================================================
+    # LOOP CLOSURE (critical for drift-free maps)
+    # ====================================================================
+
+    do_loop_closing: true                     # ESSENTIAL for large environments
+    loop_search_maximum_distance: 4.0         # Search radius for loop closures
+    loop_match_minimum_chain_size: 10         # Require multiple scans for closure
+    loop_match_maximum_variance_coarse: 2.5   # Coarse match quality
+    loop_match_minimum_response_coarse: 0.4   # Coarse match threshold
+    loop_match_minimum_response_fine: 0.5     # Fine match threshold (higher = stricter)
+
+    # ====================================================================
+    # CORRELATION PARAMETERS (scan matching search space)
+    # ====================================================================
+
+    # Search space for matching consecutive scans
+    correlation_search_space_dimension: 0.5   # ±0.5m search window
+    correlation_search_space_resolution: 0.01 # 1cm resolution (fine for indoor)
+    correlation_search_space_smear_deviation: 0.1  # Smoothing factor
+
+    # Search space for loop closures (larger area)
+    loop_search_space_dimension: 8.0          # ±8m search window
+    loop_search_space_resolution: 0.05        # 5cm resolution (coarser for speed)
+    loop_search_space_smear_deviation: 0.03
+
+    # ====================================================================
+    # SCAN MATCHER PENALTIES (prevent bad matches)
+    # ====================================================================
+
+    distance_variance_penalty: 0.5   # Penalize distance uncertainty
+    angle_variance_penalty: 1.0      # Penalize angle uncertainty more
+
+    # Search resolution and offsets
+    fine_search_angle_offset: 0.00349      # 0.2° fine search
+    coarse_search_angle_offset: 0.349      # 20° coarse search
+    coarse_angle_resolution: 0.0349        # 2° resolution
+
+    # Match quality penalties
+    minimum_angle_penalty: 0.9
+    minimum_distance_penalty: 0.5
+    use_response_expansion: true  # Expand search if no good match found
+
+    # ====================================================================
+    # MAP UPDATE PARAMETERS
+    # ====================================================================
+
+    # Map size and resolution
+    # Note: These are defaults, map grows dynamically
+    resolution: 0.05  # 5cm per pixel - good balance for indoor navigation
+
+    # Mapping rate control
+    map_update_interval: 2.0  # Update map every 2 seconds (reduces CPU load)
+
+    # ====================================================================
+    # OPTIMIZATION FREQUENCY
+    # ====================================================================
+
+    # How often to run graph optimization
+    # Higher = more CPU but more accurate map in real-time
+    optimization_step_size: 2  # Optimize every 2 new nodes
+
+    # ====================================================================
+    # TRANSFORM PUBLISHING
+    # ====================================================================
+
+    # Publish map->odom transform
+    tf_buffer_duration: 30.0   # Keep 30s of transforms
+    transform_timeout: 0.2     # 200ms timeout for transform lookups
+
+    # Transform publication rate
+    transform_publish_period: 0.05  # 20Hz - smooth for Nav2 integration
+
+    # ====================================================================
+    # RPLIDAR S3 SPECIFIC TUNING
+    # ====================================================================
+
+    # RPLidar S3 has excellent range (25m) and resolution (0.25°)
+    # These parameters leverage its capabilities:
+
+    max_laser_range: 20.0  # Use 20m effective range (conservative)
+    minimum_time_interval: 0.05  # 50ms minimum between scans (RPLidar S3 @ 20Hz)
+
+    # ====================================================================
+    # ROBUSTNESS PARAMETERS
+    # ====================================================================
+
+    # Outlier rejection
+    do_loop_closing_statistics: true  # Use statistics for loop closure validation
+
+    # Minimum scan quality
+    minimum_scan_points: 50  # Require at least 50 valid points per scan
+
+    # ====================================================================
+    # DEBUG / VISUALIZATION
+    # ====================================================================
+
+    # Set to true for development, false for production
+    debug_logging: false
+    throttle_scans: 1  # Process every scan (no throttling)

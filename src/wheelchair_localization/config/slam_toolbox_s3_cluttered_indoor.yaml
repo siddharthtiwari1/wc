@@ -1,0 +1,199 @@
+slam_toolbox:
+  ros__parameters:
+    # ROS Parameters
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+    scan_topic: /scan
+    use_map_saver: true
+    mode: mapping
+
+    # Solver Parameters
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None
+
+    # ============================================================================
+    # RPLIDAR S3 - CLUTTERED INDOOR LAB OPTIMIZED
+    # ============================================================================
+    # Environment: 10m × 8m drone lab with 4m × 2m central obstacle
+    #
+    # Characteristics:
+    #   - Boundaries: Very cluttered with AGVs and drones
+    #   - Central area: 4m × 2m rectangle obstacle
+    #   - Dense obstacles (drones on landing gear, AGVs with wheels)
+    #   - Indoor = controlled lighting, white walls
+    #   - Lab size: 10m × 8m (medium-small)
+    #
+    # CRITICAL ISSUE: 2D LiDAR "Ghost Passages"
+    #   - LiDAR mounted low (~20-30cm on wheelchair)
+    #   - Drone bodies ABOVE LiDAR plane (invisible!)
+    #   - AGV bodies ABOVE LiDAR plane (invisible!)
+    #   - LiDAR sees: Landing gear legs, wheel gaps = "free space"
+    #   - Reality: BLOCKED by drone/AGV bodies above
+    #
+    # Solution: Conservative obstacle detection + cardboard blocking
+    #   ✓ Use cardboard to fill gaps at LiDAR height
+    #   ✓ Conservative free space determination
+    #   ✓ Focus on reliable obstacle boundaries (walls, central rectangle)
+    # ============================================================================
+
+    debug_logging: false
+    throttle_scans: 1  # Process all 3,200 points/scan
+
+    # TF PUBLISHING
+    transform_publish_period: 0.02  # 50Hz
+
+    # MAP UPDATE - Frequent for cluttered environments
+    # Cluttered = lots of features = can update frequently
+    map_update_interval: 0.5  # 2x per second
+
+    # ============================================================================
+    # HIGH RESOLUTION - Critical for cluttered environments!
+    # ============================================================================
+    # Need to map:
+    #   - Small drones (20-50cm)
+    #   - Gaps between AGVs
+    #   - Narrow aisles
+    #   - Equipment legs and supports
+    #
+    # Standard: 0.05 | Good: 0.03 | CLUTTERED: 0.025 | Ultra: 0.02
+    resolution: 0.025  # 2.5cm - captures fine details of drones/obstacles!
+
+    # ============================================================================
+    # RANGE - Optimized for 10m × 8m lab
+    # ============================================================================
+    # Lab diagonal: sqrt(10² + 8²) = 12.8m
+    # Longest line of sight: ~13m
+    # Focus on close, reliable obstacles
+    #
+    # Your lab: 10m × 8m = use 12-13m range
+    max_laser_range: 12.0  # Matches lab diagonal, focuses on close accuracy
+
+    # MINIMUM TIME INTERVAL - Match S3's 10Hz
+    minimum_time_interval: 0.1  # 10Hz processing
+
+    transform_timeout: 0.2
+    tf_buffer_duration: 30.0
+    stack_size_to_use: 40000000
+    enable_interactive_mode: true
+
+    scan_queue_size: 100  # Increased to prevent message drops
+
+    # ============================================================================
+    # MOVEMENT THRESHOLDS - AGGRESSIVE for feature-rich environments
+    # ============================================================================
+    # Cluttered environment = TONS of features (every drone, AGV, shelf)
+    # Can process scans VERY frequently because always have features to match
+    #
+    # Open space: Need 0.2-0.5m movement to get new features
+    # CLUTTERED: Can process every 0.1-0.15m because features everywhere!
+    # ============================================================================
+
+    use_scan_matching: true
+    use_scan_barycenter: true
+
+    # DISTANCE THRESHOLD - Small for cluttered environments
+    # Every 10-15cm you pass new drones, AGV edges, obstacles
+    # Open: 0.2-0.5 | Cluttered: 0.15 | Very cluttered: 0.1
+    minimum_travel_distance: 0.15  # Update every 15cm - lots of features!
+
+    # ROTATION THRESHOLD - Medium-aggressive for turns
+    # Cluttered = features visible at all angles, can track rotations well
+    # Your issue: fast turns at medium speed
+    # Conservative: 0.2 (11.5°) | Balanced: 0.17 (10°) | Aggressive: 0.15 (8.6°)
+    minimum_travel_heading: 0.15  # 8.6° - smooth turns in cluttered space
+
+    # SCAN BUFFER - Increased for reliability
+    scan_buffer_size: 100  # Increased to prevent message drops
+
+    # SCAN BUFFER RANGE - Focus on reliable close obstacles
+    # Your lab: 10m × 8m = keep scans within ~10m
+    scan_buffer_maximum_scan_distance: 10.0  # Focus on reliable lab-sized obstacles
+
+    # ============================================================================
+    # SCAN MATCHING QUALITY - STRICT (feature-rich environment)
+    # ============================================================================
+    # Cluttered = abundant features = can demand HIGH quality matches
+    # Low features: 0.08 | Medium: 0.1 | CLUTTERED: 0.15 | Very strict: 0.2
+    link_match_minimum_response_fine: 0.15  # Strict matching with abundant features
+
+    # LINK SCAN SEARCH - Small for cluttered space
+    # Open: 2.5-3.0m | Cluttered: 1.5-2.0m
+    # Small movements between scans in cluttered = don't need large search
+    link_scan_maximum_distance: 2.0  # Medium search
+
+    # ============================================================================
+    # LOOP CLOSURE - Moderate for lab environment
+    # ============================================================================
+    do_loop_closing: true
+
+    # LOOP SEARCH DISTANCE - Conservative for 10m × 8m lab
+    # Lab perimeter loop: ~36m, but LiDAR loop closure typically shorter
+    # Conservative: Focus on reliable boundaries (walls, central obstacle)
+    loop_search_maximum_distance: 10.0  # Matches lab dimensions
+
+    loop_match_minimum_chain_size: 10
+    loop_match_maximum_variance_coarse: 3.0
+
+    # Loop closure quality - strict with features
+    loop_match_minimum_response_coarse: 0.45  # Strict (was 0.40)
+    loop_match_minimum_response_fine: 0.55    # Very strict (was 0.50)
+
+    # ============================================================================
+    # CORRELATION SEARCH - Small for cluttered environments
+    # ============================================================================
+    # Problem in open space: Large pose changes between scans
+    # Cluttered space: Small movements, constant features
+    #
+    # Open: 1.2-1.5m | Cluttered: 0.8-1.0m | Very cluttered: 0.6m
+    correlation_search_space_dimension: 0.8  # Small search - features everywhere
+
+    # RESOLUTION - Fine for detail
+    correlation_search_space_resolution: 0.01  # 1cm precision
+
+    # SMEAR DEVIATION - Tight for S3's accuracy in cluttered space
+    # Permissive: 0.1 | Moderate: 0.08 | TIGHT: 0.05 | Very tight: 0.03
+    correlation_search_space_smear_deviation: 0.05  # Tight matching
+
+    # ============================================================================
+    # LOOP CLOSURE SEARCH SPACE - Lab-sized
+    # ============================================================================
+
+    # LOOP DIMENSION - Match 10m × 8m lab
+    # Your lab dimensions: 10m × 8m
+    loop_search_space_dimension: 10.0  # Matches longest lab dimension
+
+    loop_search_space_resolution: 0.05
+    loop_search_space_smear_deviation: 0.03
+
+    # ============================================================================
+    # SCAN MATCHER PARAMETERS - Strict for feature-rich environment
+    # ============================================================================
+
+    # VARIANCE PENALTIES - Standard
+    distance_variance_penalty: 0.5
+    angle_variance_penalty: 1.0
+
+    # ANGLE SEARCH - Match S3's 0.1125° resolution
+    fine_search_angle_offset: 0.00196     # 0.1125° - S3's typical resolution
+    coarse_search_angle_offset: 0.349     # ~20°
+    coarse_angle_resolution: 0.0349       # ~2°
+
+    # PENALTIES - Strict for quality
+    minimum_angle_penalty: 0.9
+    minimum_distance_penalty: 0.5
+
+    use_response_expansion: true
+
+    # QoS OVERRIDES
+    qos_overrides:
+      /scan:
+        subscription:
+          reliability: reliable
+          history: keep_last
+          depth: 100
+          durability: volatile
