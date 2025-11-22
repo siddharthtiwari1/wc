@@ -178,11 +178,14 @@ class ObstaclePublisherNode(Node):
             # Mark cells with bounds checking
             for dx in range(-half_x, half_x + 1):
                 for dy in range(-half_y, half_y + 1):
-                nx = gx + dx
-                ny = gy + dy
+                    nx = gx + dx
+                    ny = gy + dy
 
-                if 0 <= nx < self.grid_width and 0 <= ny < self.grid_height:
-                    grid[ny, nx] = 100  # Occupied
+                    if 0 <= nx < self.grid_width and 0 <= ny < self.grid_height:
+                        grid[ny, nx] = 100  # Occupied
+
+        except Exception as e:
+            self.get_logger().warn_throttle(5.0, f'Mark obstacle error: {e}')
 
 
 def main(args=None):
