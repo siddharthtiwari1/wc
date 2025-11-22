@@ -1,0 +1,45 @@
+# Crowd Navigation Planner Configuration
+
+planner:
+  planning_frequency: 10.0  # Hz
+  horizon: 3.0  # seconds
+  dt: 0.1  # seconds
+
+  # Sampling optimizer
+  num_samples: 100
+  num_elites: 10
+  num_iterations: 5
+  temperature: 1.0
+  alpha: 0.3  # CEM smoothing
+
+  # Device
+  device: 'cuda'  # 'cuda' or 'cpu'
+
+# Cost function weights
+costs:
+  goal_weight: 1.0
+  collision_weight: 10.0
+  smoothness_weight: 0.1
+  comfort_weight: 0.05
+
+  goal_tolerance: 0.5  # meters
+  collision_margin: 0.5  # meters
+
+# Collision checking
+collision:
+  robot_radius: 0.5  # meters
+  safety_margin: 0.3  # meters
+
+# Velocity limits
+velocity:
+  max_linear: 0.5  # m/s
+  max_angular: 1.0  # rad/s
+  min_linear: 0.0  # m/s
+  min_angular: -1.0  # rad/s
+
+# Model paths
+model:
+  checkpoint_path: ''  # Path to trained model
+  perception_encoder_path: ''
+  vqvae_path: ''
+  pixelcnn_path: ''

@@ -1,0 +1,43 @@
+# Diffusion Model Configuration
+
+model:
+  diffusion:
+    trajectory_dim: 2  # (x, y)
+    horizon: 30  # 3 seconds at 10Hz
+    condition_dim: 512
+    num_diffusion_steps: 1000
+    beta_schedule: 'cosine'  # 'linear' or 'cosine'
+    model_channels: 128
+    num_layers: 4
+
+  unet:
+    in_channels: 2
+    out_channels: 2
+    time_emb_dim: 128
+    model_channels: 128
+
+training:
+  batch_size: 64
+  learning_rate: 0.0001
+  num_epochs: 300
+  mixed_precision: true
+
+  optimizer: 'adamw'
+  scheduler: 'cosine'
+
+  device: 'cuda'
+
+planner:
+  planning_frequency: 10.0  # Hz
+  ensemble_size: 10
+  sampling_method: 'ddim'  # 'ddpm' or 'ddim'
+  num_sampling_steps: 50  # For DDIM
+
+social:
+  detect_groups: true
+  group_distance_threshold: 2.0  # meters
+  min_group_size: 2
+
+uncertainty:
+  risk_threshold: 0.5
+  use_ensemble: true
