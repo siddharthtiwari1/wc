@@ -73,14 +73,36 @@ class YOLODetectorNode(Node):
         # Camera info
         self.camera_info = None
 
-        # Load YOLO model
+        # Load YOLO model with GPU fallback
         self.get_logger().info(f'Loading YOLO model: {self.model_path}')
+        self.gpu_failed = False
         try:
             self.model = YOLO(self.model_path)
-            self.model.to(self.device)
-            self.get_logger().info(
-                f'YOLO model loaded successfully on {self.device}'
-            )
+
+            # Try GPU first, fallback to CPU if fails
+            if self.device == 'cuda':
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        self.model.to('cuda')
+                        self.device = 'cuda'
+                        self.get_logger().info(
+                            f'✓ YOLO model loaded on GPU (CUDA available: {torch.cuda.get_device_name(0)})'
+                        )
+                    else:
+                        self.get_logger().warn('CUDA requested but not available - falling back to CPU')
+                        self.model.to('cpu')
+                        self.device = 'cpu'
+                        self.gpu_failed = True
+                except Exception as e:
+                    self.get_logger().error(f'GPU initialization failed: {e} - falling back to CPU')
+                    self.model.to('cpu')
+                    self.device = 'cpu'
+                    self.gpu_failed = True
+            else:
+                self.model.to('cpu')
+                self.get_logger().info('YOLO model loaded on CPU')
+
         except Exception as e:
             self.get_logger().error(f'Failed to load YOLO model: {e}')
             raise
@@ -181,7 +203,7 @@ class YOLODetectorNode(Node):
             )
 
     def detect_objects(self, image: np.ndarray) -> List[dict]:
-        """Run YOLO detection on image.
+        """Run YOLO detection on image with GPU OOM handling.
 
         Args:
             image: OpenCV image (BGR format)
@@ -193,40 +215,94 @@ class YOLODetectorNode(Node):
                 - class_id: int
                 - class_name: str
         """
-        # Run inference
-        results = self.model.predict(
-            image,
-            conf=self.conf_threshold,
-            iou=self.iou_threshold,
-            imgsz=self.img_size,
-            verbose=False,
-            classes=self.target_classes if self.target_classes else None
-        )
-
         detections = []
 
-        # Parse results
-        if len(results) > 0:
-            result = results[0]
-            boxes = result.boxes
+        try:
+            # Run inference
+            results = self.model.predict(
+                image,
+                conf=self.conf_threshold,
+                iou=self.iou_threshold,
+                imgsz=self.img_size,
+                verbose=False,
+                classes=self.target_classes if self.target_classes else None
+            )
 
-            for box in boxes:
-                # Get box coordinates
-                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+            # Parse results
+            if len(results) > 0:
+                result = results[0]
+                boxes = result.boxes
 
-                # Get confidence and class
-                confidence = float(box.conf[0].cpu().numpy())
-                class_id = int(box.cls[0].cpu().numpy())
-                class_name = self.model.names[class_id]
+                for box in boxes:
+                    try:
+                        # Get box coordinates
+                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
 
-                detection = {
-                    'bbox': [float(x1), float(y1), float(x2), float(y2)],
-                    'confidence': confidence,
-                    'class_id': class_id,
-                    'class_name': class_name
-                }
+                        # Get confidence and class
+                        confidence = float(box.conf[0].cpu().numpy())
+                        class_id = int(box.cls[0].cpu().numpy())
+                        class_name = self.model.names[class_id]
 
-                detections.append(detection)
+                        detection = {
+                            'bbox': [float(x1), float(y1), float(x2), float(y2)],
+                            'confidence': confidence,
+                            'class_id': class_id,
+                            'class_name': class_name
+                        }
+
+                        detections.append(detection)
+                    except Exception as e:
+                        self.get_logger().warn_throttle(5.0, f'Detection parsing error: {e}')
+                        continue
+
+        except RuntimeError as e:
+            # Handle CUDA OOM error
+            if 'out of memory' in str(e).lower() and self.device == 'cuda' and not self.gpu_failed:
+                self.get_logger().error('GPU OUT OF MEMORY! Falling back to CPU permanently')
+                self.get_logger().warn('This will reduce inference speed significantly')
+                try:
+                    self.model.to('cpu')
+                    self.device = 'cpu'
+                    self.gpu_failed = True
+
+                    # Retry on CPU
+                    results = self.model.predict(
+                        image,
+                        conf=self.conf_threshold,
+                        iou=self.iou_threshold,
+                        imgsz=self.img_size,
+                        verbose=False,
+                        classes=self.target_classes if self.target_classes else None
+                    )
+
+                    # Parse CPU results
+                    if len(results) > 0:
+                        result = results[0]
+                        boxes = result.boxes
+                        for box in boxes:
+                            try:
+                                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                                confidence = float(box.conf[0].cpu().numpy())
+                                class_id = int(box.cls[0].cpu().numpy())
+                                class_name = self.model.names[class_id]
+
+                                detection = {
+                                    'bbox': [float(x1), float(y1), float(x2), float(y2)],
+                                    'confidence': confidence,
+                                    'class_id': class_id,
+                                    'class_name': class_name
+                                }
+                                detections.append(detection)
+                            except:
+                                continue
+
+                except Exception as cpu_error:
+                    self.get_logger().error(f'CPU fallback also failed: {cpu_error}')
+            else:
+                self.get_logger().error(f'YOLO inference error: {e}')
+
+        except Exception as e:
+            self.get_logger().error_throttle(5.0, f'Unexpected detection error: {e}')
 
         return detections
 
