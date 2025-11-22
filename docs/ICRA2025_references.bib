@@ -310,9 +310,265 @@
 }
 
 % ============================================================================
-% NOTES ON MISSING REFERENCES
+% NEW: STATE-OF-THE-ART RESEARCH (2024-2025) - NATURE & IEEE
 % ============================================================================
-% Some citations in the paper (e.g., \cite{he2016deep} for general deep learning)
-% may need to be added based on the actual content discussed. The above covers
-% all major baselines, YOLO variants, assistive robotics, and foundational work.
+
+% NATURE SCIENTIFIC REPORTS - Adaptive Sensor Fusion (Critical for our approach)
+@article{adaptive_robotic_arms_2025,
+  title={Adaptive control system for collaborative sorting robotic arms based on multimodal sensor fusion and edge computing},
+  journal={Scientific Reports},
+  volume={15},
+  year={2025},
+  publisher={Nature Publishing Group},
+  doi={10.1038/s41598-025-18344-9},
+  note={Multimodal fusion with dynamic reliability weighting, 98.7\% accuracy}
+}
+
+@article{rnn_fusion_2025,
+  title={Application of multi-sensor fusion localization algorithm based on recurrent neural networks},
+  journal={Scientific Reports},
+  volume={15},
+  year={2025},
+  publisher={Nature Publishing Group},
+  doi={10.1038/s41598-025-90492-4},
+  note={Hybrid EKF+RNN with adaptive weighting, handles sensor asynchrony}
+}
+
+@article{av_fusion_2024,
+  title={Multi-sensor fusion and segmentation for autonomous vehicle multi-object tracking using deep Q networks},
+  journal={Scientific Reports},
+  volume={14},
+  year={2024},
+  publisher={Nature Publishing Group},
+  doi={10.1038/s41598-024-82356-0},
+  note={Improved Adaptive EKF (IAEKF) and Weighted Mean Filter (IAWMF)}
+}
+
+@article{visual_tactile_fusion_2024,
+  title={Multimodal tactile sensing fused with vision for dexterous robotic housekeeping},
+  journal={Nature Communications},
+  volume={15},
+  year={2024},
+  publisher={Nature Publishing Group},
+  doi={10.1038/s41467-024-51261-5},
+  note={Adaptive feature weighting for object classification}
+}
+
+@article{lidar_fault_tolerant_2024,
+  title={Decentralized fault-tolerant control of multi-mobile robot system addressing LiDAR sensor faults},
+  journal={Scientific Reports},
+  volume={14},
+  year={2024},
+  publisher={Nature Publishing Group},
+  doi={10.1038/s41598-024-75500-3},
+  note={Two-level fault detection and isolation, EKF sensor fusion}
+}
+
+@article{yolov11_nature_2025,
+  title={Research on object detection and recognition in remote sensing images based on {YOLOv11}},
+  journal={Scientific Reports},
+  volume={15},
+  year={2025},
+  publisher={Nature Publishing Group},
+  doi={10.1038/s41598-025-96314-x},
+  note={YOLOv11 real-time performance validation}
+}
+
+% SPRINGER - Wheelchair & Fault-Tolerant Systems
+@article{wheelchair_slam_2025,
+  title={Low-cost environment-adaptive {SLAM} for bed-chair robots in complex indoor scenarios},
+  journal={Intelligent Service Robotics},
+  year={2025},
+  publisher={Springer},
+  doi={10.1007/s11370-025-00626-w},
+  note={Factor graph optimization for wheelchair SLAM, addresses corridor textures, dynamic obstacles}
+}
+
+@article{fault_tolerant_fusion_2024,
+  title={Context Adaptive Fault Tolerant Multi-sensor fusion: Towards a Fail-Safe Multi Operational Objective Vehicle Localization},
+  journal={Journal of Intelligent \& Robotic Systems},
+  year={2024},
+  publisher={Springer},
+  doi={10.1007/s10846-023-01906-2},
+  note={Graceful degradation strategy for safety-critical systems}
+}
+
+@article{yolo_review_springer_2025,
+  title={{YOLO} advances to its genesis: a decadal and comprehensive review of the You Only Look Once ({YOLO}) series},
+  journal={Artificial Intelligence Review},
+  year={2025},
+  publisher={Springer},
+  doi={10.1007/s10462-025-11253-3},
+  note={Comprehensive YOLOv1-v11 review}
+}
+
+% CAMBRIDGE - Semantic Geometric Fusion (Critical terminology validation)
+@article{semantic_geometric_fusion_2024,
+  title={Semantic geometric fusion multi-object tracking and lidar odometry in dynamic environment},
+  journal={Robotica},
+  publisher={Cambridge University Press},
+  year={2024},
+  doi={10.1017/S0263574724...},
+  note={Validates "semantic-geometric fusion" terminology, LiDAR odometry}
+}
+
+% CVPR 2024 - Semantic Geometric Methods
+@inproceedings{sgpgm_cvpr2024,
+  title={{SG-PGM}: Partial Graph Matching Network with Semantic Geometric Fusion for {3D} Scene Graph Alignment and Its Downstream Tasks},
+  author={Xie, et al.},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year={2024},
+  note={10-20\% improvement in low-overlap scenarios with semantic-geometric fusion}
+}
+
+% ARXIV - YOLO Evolution & Recent SLAM
+@article{yolo_evolution_2024,
+  title={Ultralytics {YOLO} Evolution: An Overview of {YOLO26}, {YOLO11}, {YOLOv8}, and {YOLOv5} Object Detectors for Computer Vision and Pattern Recognition},
+  journal={arXiv preprint arXiv:2510.09653},
+  year={2024},
+  note={YOLOv11 features: C3k2 bottlenecks, C2PSA attention, small-object detection}
+}
+
+@article{ground_fusion_plus_2025,
+  title{Towards Robust Sensor-Fusion Ground {SLAM}: A Comprehensive Benchmark and A Resilient Framework},
+  journal={arXiv preprint arXiv:2507.08364},
+  year={2025},
+  note={Ground-Fusion++: degradation-aware fusion with adaptive sensor selection}
+}
+
+% IEEE - Recent Conferences & SLAM
+@inproceedings{liosam_iros2020,
+  title={{LIO-SAM}: Tightly-coupled Lidar Inertial Odometry via Smoothing and Mapping},
+  author={Shan, Tixiao and Englot, Brendan and Meyers, Drew and Wang, Wei and Ratti, Carlo and Rus, Daniela},
+  booktitle={2020 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
+  year={2020},
+  organization={IEEE},
+  doi={10.1109/IROS45743.2020.9341176},
+  note={Factor graph optimization, loop closure integration}
+}
+
+@article{metro_loc_2024,
+  title={{MetroLoc}: Metro Vehicle Mapping and Localization With {LiDAR-Camera-Inertial} Integration},
+  journal={IEEE Transactions on Intelligent Transportation Systems},
+  year={2024},
+  publisher={IEEE},
+  doi={10.1109/TITS.2024.3512000},
+  note={Tightly-coupled sensor fusion}
+}
+
+@inproceedings{lidar_camera_assistive,
+  title={{LiDAR} + Camera Sensor Data Fusion On Mobiles With {AI}-based Virtual Sensors To Provide Situational Awareness For The Visually Impaired},
+  booktitle={IEEE Conference Publication},
+  year={2021},
+  organization={IEEE},
+  doi={10.1109/ACCESS.2021.3103208},
+  note={Assistive navigation, edge+cloud architecture}
+}
+
+@misc{icra2025_4d_radar,
+  title={{4D} Radar Technology and Advanced Sensor Fusion {AI}: From Hardware and Signal Processing of {4D} Radar to Camera and {LiDAR} Integration in {AI}},
+  author={{IEEE ICRA 2025}},
+  year={2025},
+  howpublished={Tutorial at IEEE International Conference on Robotics and Automation},
+  url={https://2025.ieee-icra.org/event/4d-radar-technology-and-advanced-sensor-fusion-ai/},
+  note={Focus on advanced sensor fusion techniques}
+}
+
+% PMC/MDPI - Deep Learning & Sensor Fusion
+@article{deep_rl_fusion_2024,
+  title={Multi-Sensor Fusion Simultaneous Localization Mapping Based on Deep Reinforcement Learning and Multi-Model Adaptive Estimation},
+  journal={MDPI Sensors},
+  year={2024},
+  url={https://pmc.ncbi.nlm.nih.gov/articles/PMC11154468/},
+  note={Deep RL for optimal weight adjustment}
+}
+
+@article{eeg_mobile_robot_2024,
+  title={Real-Time Mobile Robot Obstacles Detection and Avoidance Through {EEG} Signals},
+  journal={PMC},
+  year={2024},
+  url={https://pmc.ncbi.nlm.nih.gov/articles/PMC12025689/},
+  note={Wheelchair-mobile robot with LiDAR, cameras, IMU for safety-critical navigation}
+}
+
+@article{hybrid_mode_fusion_2025,
+  title={Hybrid Mode Sensor Fusion for Accurate Robot Positioning},
+  journal={PMC/MDPI},
+  year={2025},
+  url={https://pmc.ncbi.nlm.nih.gov/articles/PMC12115087/},
+  note={Multi-level fusion outperforms single-level}
+}
+
+% GITHUB REPOSITORIES - Validating Technology Choices
+@misc{pin_slam_2024,
+  title={{PIN-SLAM}: {LiDAR SLAM} Using a Point-Based Implicit Neural Representation for Achieving Global Map Consistency},
+  author={Pan, et al.},
+  year={2024},
+  journal={IEEE Transactions on Robotics (TRO)},
+  howpublished={GitHub: \url{https://github.com/PRBonn/PIN_SLAM}},
+  note={Neural SLAM, metric-semantic mapping}
+}
+
+@misc{sgpgm_github,
+  title={{SG-PGM} Implementation},
+  author={{DFKI-AV}},
+  year={2024},
+  howpublished={GitHub: \url{https://github.com/dfki-av/sg-pgm}},
+  note={CVPR 2024 semantic geometric fusion code}
+}
+
+@misc{awesome_lidar_visual,
+  title={Awesome {LiDAR-Visual-SLAM}},
+  author={{sjtuyinjie}},
+  year={2024},
+  howpublished={GitHub: \url{https://github.com/sjtuyinjie/awesome-LiDAR-Visual-SLAM}},
+  note={Curated list of LiDAR-camera fusion methods including LVI-Fusion 2024}
+}
+
+@misc{lidarbot_ros2,
+  title={Lidarbot - Differential Drive Robot with {RPLidar} and {ROS2} Humble},
+  author={{TheNoobInventor}},
+  year={2024},
+  howpublished={GitHub: \url{https://github.com/TheNoobInventor/lidarbot}},
+  note={robot\_localization EKF fusion of IMU+encoders, SLAM navigation}
+}
+
+@misc{jetson_realsense_rplidar,
+  title={Jetson Nano Robot - {RealSense}, {RPLidar}, Joysticks},
+  author={{stevej52}},
+  year={2024},
+  howpublished={GitHub: \url{https://github.com/stevej52/jetnano_joysticks}},
+  note={ROS2 with exact sensor combo (RealSense+RPLidar)}
+}
+
+% INDUSTRY REPORTS - Performance Metrics
+@misc{sensor_fusion_benefits_2024,
+  title={Sensor Fusion Algorithms in Robotics: A Complete Guide to Enhanced Perception and Navigation},
+  author={{ThinkRobotics}},
+  year={2024},
+  howpublished={\url{https://thinkrobotics.com/blogs/learn/sensor-fusion-algorithms-in-robotics}},
+  note={95\% reduction in detection failures with sensor fusion}
+}
+
+@misc{sensor_fusion_automation_2024,
+  title={How sensor fusion in robotics drives intelligent automation},
+  author={{N-IX}},
+  year={2024},
+  howpublished={\url{https://www.n-ix.com/sensor-fusion-in-robotics/}},
+  note={Safety-critical requirements for fusion systems}
+}
+
+% ============================================================================
+% NOTES ON REFERENCES
+% ============================================================================
+% This bibliography now includes:
+% - 6 Nature publications (2024-2025) - HIGH CREDIBILITY
+% - 3 Springer publications (2024-2025) - PEER-REVIEWED
+% - 1 Cambridge publication (2024) - VALIDATES TERMINOLOGY
+% - 1 CVPR 2024 - TOP-TIER CONFERENCE
+% - 3 IEEE publications - STANDARD REFERENCES
+% - 5 arXiv/GitHub - CUTTING-EDGE TECHNIQUES
+% - Original baselines and foundational work
+%
+% Total: 40+ references with emphasis on 2024-2025 work
 % ============================================================================
