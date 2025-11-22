@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>ran_complete</name>
+  <version>1.0.0</version>
+  <description>
+    RAN: Real-world Attribute-aware Navigation - Complete End-to-End System
+
+    NOVEL CONTRIBUTIONS for RSS/ICRA 2026:
+    1. Uncertainty-aware perception with per-attribute confidence
+    2. Hierarchical verification cascade (4 levels)
+    3. Adaptive threshold calibration
+    4. Dynamic map updates for non-static scenes
+    5. Wheelchair-specific safety layer
+    6. Real robot deployment (RPLidar S3 + RealSense D455)
+
+    Author: Siddharth Tiwari
+    Target: RSS 2026 / ICRA 2026
+  </description>
+
+  <maintainer email="s24035@students.iitmandi.ac.in">Siddharth Tiwari</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>message_filters</depend>
+  <depend>nav2_msgs</depend>
+  <depend>action_msgs</depend>
+
+  <!-- Wheelchair integration -->
+  <depend>wheelchair_firmware</depend>
+  <depend>wheelchair_localization</depend>
+  <depend>wheelchair_bringup</depend>
+
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-torch</exec_depend>
+  <exec_depend>python3-scipy</exec_depend>
+  <exec_depend>python3-scikit-learn</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>capnav_real</name>
+  <version>2.0.0</version>
+  <description>
+    CapNav-Real: Attribute-Aware Navigation for Real Wheelchair (Improved from ICLR 2026)
+
+    Based on: Vatsi et al., "CapNav: Towards Robust Indoor Navigation with Description-First Maps"
+
+    Improvements over original CapNav:
+    - Real robot deployment (not simulation)
+    - Adaptive threshold calibration
+    - Uncertainty estimation per attribute
+    - Dynamic map updates
+    - ROS2 Jazzy + Nav2 integration
+    - Wheelchair-specific safety constraints
+  </description>
+
+  <maintainer email="sidd@wheelchair.com">Siddharth Tiwari</maintainer>
+  <license>MIT</license>
+  <author>Siddharth Tiwari (Real Robot Adaptation)</author>
+  <author>Ritali Vatsi (Original CapNav)</author>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>message_filters</depend>
+  <depend>nav2_msgs</depend>
+
+  <!-- Wheelchair integration -->
+  <depend>wheelchair_firmware</depend>
+  <depend>wheelchair_localization</depend>
+
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-torch</exec_depend>
+  <exec_depend>python3-scipy</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
