@@ -14,6 +14,7 @@ from visualization_msgs.msg import MarkerArray
 from nav_msgs.msg import OccupancyGrid
 from geometry_msgs.msg import PoseStamped
 import numpy as np
+import math
 
 
 class ObstaclePublisherNode(Node):
@@ -63,38 +64,92 @@ class ObstaclePublisherNode(Node):
         )
 
     def obstacles_callback(self, msg: MarkerArray):
-        """Convert obstacles to costmap.
+        """Convert obstacles to costmap with comprehensive validation.
 
         Args:
             msg: MarkerArray of obstacles
         """
-        # Create occupancy grid
-        costmap = OccupancyGrid()
-        costmap.header = msg.markers[0].header if msg.markers else None
-        costmap.info.resolution = self.resolution
-        costmap.info.width = self.grid_width
-        costmap.info.height = self.grid_height
-        costmap.info.origin.position.x = -self.width / 2
-        costmap.info.origin.position.y = -self.height / 2
-        costmap.info.origin.orientation.w = 1.0
+        try:
+            # Input validation
+            if not msg or not hasattr(msg, 'markers'):
+                self.get_logger().warn_throttle(5.0, 'Invalid MarkerArray message')
+                return
 
-        # Initialize grid (0 = free, 100 = occupied)
-        grid = np.zeros((self.grid_height, self.grid_width), dtype=np.int8)
+            # Create occupancy grid
+            costmap = OccupancyGrid()
 
-        # Mark obstacles
-        for marker in msg.markers:
-            if marker.ns == 'fused_obstacles':
-                self.mark_obstacle(
-                    grid,
-                    marker.pose.position.x,
-                    marker.pose.position.y,
-                    marker.scale.x,
-                    marker.scale.y
-                )
+            # CRITICAL FIX: Handle empty markers array properly
+            if msg.markers and len(msg.markers) > 0:
+                costmap.header = msg.markers[0].header
+            else:
+                # Create default header with current timestamp
+                costmap.header.stamp = self.get_clock().now().to_msg()
+                costmap.header.frame_id = 'base_link'
 
-        # Flatten and publish
-        costmap.data = grid.flatten().tolist()
-        self.costmap_pub.publish(costmap)
+            costmap.info.resolution = self.resolution
+            costmap.info.width = self.grid_width
+            costmap.info.height = self.grid_height
+            costmap.info.origin.position.x = -self.width / 2
+            costmap.info.origin.position.y = -self.height / 2
+            costmap.info.origin.orientation.w = 1.0
+
+            # Initialize grid (0 = free, 100 = occupied)
+            grid = np.zeros((self.grid_height, self.grid_width), dtype=np.int8)
+
+            # Mark obstacles with validation
+            for marker in msg.markers:
+                if marker.ns == 'fused_obstacles':
+                    # Validate marker data
+                    if self._validate_marker(marker):
+                        self.mark_obstacle(
+                            grid,
+                            marker.pose.position.x,
+                            marker.pose.position.y,
+                            marker.scale.x,
+                            marker.scale.y
+                        )
+
+            # Flatten and publish
+            costmap.data = grid.flatten().tolist()
+            self.costmap_pub.publish(costmap)
+
+        except Exception as e:
+            self.get_logger().error(f'Costmap generation error: {e}')
+
+    def _validate_marker(self, marker) -> bool:
+        """Validate marker data before processing.
+
+        Args:
+            marker: Marker message to validate
+
+        Returns:
+            True if valid, False otherwise
+        """
+        try:
+            # Check for NaN/inf in position
+            x = marker.pose.position.x
+            y = marker.pose.position.y
+            if math.isnan(x) or math.isinf(x) or math.isnan(y) or math.isinf(y):
+                self.get_logger().warn_throttle(5.0, f'Invalid marker position: ({x}, {y})')
+                return False
+
+            # Check for valid scale
+            sx = marker.scale.x
+            sy = marker.scale.y
+            if math.isnan(sx) or math.isinf(sx) or sx <= 0:
+                return False
+            if math.isnan(sy) or math.isinf(sy) or sy <= 0:
+                return False
+
+            # Check if within reasonable bounds
+            if abs(x) > self.width or abs(y) > self.height:
+                return False
+
+            return True
+
+        except Exception as e:
+            self.get_logger().warn_throttle(5.0, f'Marker validation error: {e}')
+            return False
 
     def mark_obstacle(
         self,
@@ -104,24 +159,25 @@ class ObstaclePublisherNode(Node):
         size_x: float,
         size_y: float
     ):
-        """Mark obstacle in grid.
+        """Mark obstacle in grid with bounds checking.
 
         Args:
             grid: Occupancy grid
             x, y: Obstacle position
             size_x, size_y: Obstacle size
         """
-        # Convert to grid coordinates
-        gx = int((x + self.width / 2) / self.resolution)
-        gy = int((y + self.height / 2) / self.resolution)
+        try:
+            # Convert to grid coordinates
+            gx = int((x + self.width / 2) / self.resolution)
+            gy = int((y + self.height / 2) / self.resolution)
 
-        # Obstacle size in grid cells
-        half_x = int((size_x / 2 + self.inflation) / self.resolution)
-        half_y = int((size_y / 2 + self.inflation) / self.resolution)
+            # Obstacle size in grid cells
+            half_x = int((size_x / 2 + self.inflation) / self.resolution)
+            half_y = int((size_y / 2 + self.inflation) / self.resolution)
 
-        # Mark cells
-        for dx in range(-half_x, half_x + 1):
-            for dy in range(-half_y, half_y + 1):
+            # Mark cells with bounds checking
+            for dx in range(-half_x, half_x + 1):
+                for dy in range(-half_y, half_y + 1):
                 nx = gx + dx
                 ny = gy + dy
 
