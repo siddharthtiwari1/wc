@@ -18,7 +18,14 @@ setup(
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
         (os.path.join('share', package_name, 'rviz'), glob('rviz/*.rviz')),
     ],
-    install_requires=['setuptools'],
+    install_requires=[
+        'setuptools',
+        'numpy>=1.20.0',
+        'opencv-python>=4.5.0',
+        'scikit-learn>=1.0.0',
+        'scipy>=1.7.0',
+        'ultralytics>=8.0.0',  # YOLOv11
+    ],
     zip_safe=True,
     maintainer='Siddharth Tiwari',
     maintainer_email='s24035@students.iitmandi.ac.in',

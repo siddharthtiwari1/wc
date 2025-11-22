@@ -564,7 +564,525 @@ class RobustSensorFusionNode(Node):
         ])
         return R
 
-    # [Continue in next file due to length...]
+    # ==================================================================
+    # FUSION IMPLEMENTATION METHODS
+    # ==================================================================
+
+    def extract_lidar_clusters(self, lidar_msg: LaserScan) -> List[Dict]:
+        """Extract obstacle clusters from LiDAR scan.
+
+        Args:
+            lidar_msg: Raw LiDAR scan message
+
+        Returns:
+            List of cluster dictionaries with centroid, points, bbox
+        """
+        clusters = []
+
+        try:
+            # Input validation
+            if not lidar_msg or not lidar_msg.ranges:
+                return clusters
+
+            # Convert polar to Cartesian with range filtering
+            points = []
+            for i, r in enumerate(lidar_msg.ranges):
+                # Validate range value
+                if math.isnan(r) or math.isinf(r):
+                    continue
+
+                if self.min_obstacle_distance <= r <= self.max_obstacle_distance:
+                    angle = lidar_msg.angle_min + i * lidar_msg.angle_increment
+                    x = r * math.cos(angle)
+                    y = r * math.sin(angle)
+                    points.append([x, y])
+
+            if len(points) < 3:
+                return clusters
+
+            points = np.array(points)
+
+            # Simple clustering based on distance
+            # Group points that are close together
+            used = set()
+            for i in range(len(points)):
+                if i in used:
+                    continue
+
+                cluster_points = [i]
+                used.add(i)
+
+                # Find nearby points
+                for j in range(i+1, len(points)):
+                    if j in used:
+                        continue
+                    dist = np.linalg.norm(points[i] - points[j])
+                    if dist < 0.2:  # 20cm clustering threshold
+                        cluster_points.append(j)
+                        used.add(j)
+
+                # Only keep clusters with minimum size
+                if len(cluster_points) >= 3:
+                    cluster_pts = points[cluster_points]
+                    centroid = np.mean(cluster_pts, axis=0)
+                    min_pt = np.min(cluster_pts, axis=0)
+                    max_pt = np.max(cluster_pts, axis=0)
+
+                    clusters.append({
+                        'centroid': centroid,
+                        'points': cluster_pts,
+                        'bbox_min': min_pt,
+                        'bbox_max': max_pt,
+                        'size': max_pt - min_pt
+                    })
+
+        except Exception as e:
+            self.get_logger().error(f'LiDAR clustering error: {e}')
+
+        return clusters
+
+    def _perform_fusion(
+        self,
+        lidar_clusters: List[Dict],
+        yolo_detections: List,
+        depth_image: np.ndarray,
+        header: Header
+    ) -> List[FusedObstacle]:
+        """Perform adaptive sensor fusion.
+
+        Args:
+            lidar_clusters: Extracted LiDAR clusters
+            yolo_detections: YOLO detection results
+            depth_image: Aligned depth image
+            header: Message header for timestamps
+
+        Returns:
+            List of fused obstacles
+        """
+        fused_obstacles = []
+        obstacle_id = 0
+
+        try:
+            # Mode-specific fusion
+            if self.fusion_mode == FusionMode.LIDAR_ONLY:
+                # LiDAR-only mode
+                for cluster in lidar_clusters:
+                    position = np.array([
+                        cluster['centroid'][0],
+                        cluster['centroid'][1],
+                        0.0
+                    ])
+                    size = np.array([
+                        cluster['size'][0],
+                        cluster['size'][1],
+                        0.5  # Assume 50cm height
+                    ])
+
+                    obstacle = FusedObstacle(
+                        id=obstacle_id,
+                        position=position,
+                        size=size,
+                        confidence=0.7,  # LiDAR base confidence
+                        semantic_class='unknown',
+                        source='lidar'
+                    )
+                    fused_obstacles.append(obstacle)
+                    obstacle_id += 1
+
+            elif self.fusion_mode == FusionMode.CAMERA_ONLY:
+                # Camera-only mode
+                for detection in yolo_detections:
+                    try:
+                        # Extract detection info (vision_msgs/Detection2D format)
+                        bbox = detection.bbox
+                        cx = int(bbox.center.position.x)
+                        cy = int(bbox.center.position.y)
+
+                        # Get depth at detection center
+                        if (0 <= cy < depth_image.shape[0] and
+                            0 <= cx < depth_image.shape[1]):
+
+                            # Extract depth patch
+                            half_w = int(bbox.size_x / 4)
+                            half_h = int(bbox.size_y / 4)
+                            y_min = max(0, cy - half_h)
+                            y_max = min(depth_image.shape[0], cy + half_h)
+                            x_min = max(0, cx - half_w)
+                            x_max = min(depth_image.shape[1], cx + half_w)
+
+                            depth_patch = depth_image[y_min:y_max, x_min:x_max]
+                            valid_depths = depth_patch[depth_patch > 0]
+
+                            if len(valid_depths) > 0:
+                                depth = np.median(valid_depths) / 1000.0  # mm to m
+
+                                # Get semantic class
+                                semantic_class = 'unknown'
+                                confidence = 0.5
+                                if len(detection.results) > 0:
+                                    result = detection.results[0]
+                                    if hasattr(result, 'hypothesis') and len(result.hypothesis) > 0:
+                                        confidence = result.hypothesis[0].score
+                                        class_id = result.hypothesis[0].class_id
+                                        semantic_class = f'class_{class_id}'
+
+                                # Rough 3D position estimate
+                                position = np.array([depth, 0.0, 0.0])
+                                size = np.array([0.3, 0.3, 0.5])
+
+                                obstacle = FusedObstacle(
+                                    id=obstacle_id,
+                                    position=position,
+                                    size=size,
+                                    confidence=confidence,
+                                    semantic_class=semantic_class,
+                                    source='camera'
+                                )
+                                fused_obstacles.append(obstacle)
+                                obstacle_id += 1
+                    except Exception as e:
+                        self.get_logger().warn(f'Detection processing error: {e}')
+                        continue
+
+            else:  # FULL_FUSION or LIDAR_CAMERA
+                # Full fusion with adaptive weighting
+                matched_clusters = set()
+                matched_detections = set()
+
+                # Associate LiDAR clusters with YOLO detections
+                for i, cluster in enumerate(lidar_clusters):
+                    best_match = None
+                    best_score = 0.5  # Minimum match score
+
+                    lidar_pos = cluster['centroid']
+                    lidar_dist = np.linalg.norm(lidar_pos)
+
+                    for j, detection in enumerate(yolo_detections):
+                        if j in matched_detections:
+                            continue
+
+                        try:
+                            bbox = detection.bbox
+                            cx = int(bbox.center.position.x)
+                            cy = int(bbox.center.position.y)
+
+                            if (0 <= cy < depth_image.shape[0] and
+                                0 <= cx < depth_image.shape[1]):
+
+                                # Get depth
+                                half_w = int(bbox.size_x / 4)
+                                half_h = int(bbox.size_y / 4)
+                                y_min = max(0, cy - half_h)
+                                y_max = min(depth_image.shape[0], cy + half_h)
+                                x_min = max(0, cx - half_w)
+                                x_max = min(depth_image.shape[1], cx + half_w)
+
+                                depth_patch = depth_image[y_min:y_max, x_min:x_max]
+                                valid_depths = depth_patch[depth_patch > 0]
+
+                                if len(valid_depths) > 0:
+                                    depth = np.median(valid_depths) / 1000.0
+
+                                    # Distance-based association
+                                    dist_diff = abs(lidar_dist - depth)
+                                    if dist_diff < 0.5:  # Within 50cm
+                                        score = 1.0 - (dist_diff / 0.5)
+                                        if score > best_score:
+                                            best_score = score
+                                            best_match = (j, depth, detection)
+                        except:
+                            continue
+
+                    # Create fused obstacle
+                    if best_match:
+                        det_idx, cam_depth, detection = best_match
+                        matched_clusters.add(i)
+                        matched_detections.add(det_idx)
+
+                        # Adaptive weighting based on distance
+                        w_lidar = 1.0 / (1.0 + np.exp(-2.0 * (lidar_dist - 2.0)))
+                        w_camera = 1.0 - w_lidar
+
+                        # Get confidence from YOLO
+                        confidence = 0.5
+                        semantic_class = 'unknown'
+                        if len(detection.results) > 0:
+                            result = detection.results[0]
+                            if hasattr(result, 'hypothesis') and len(result.hypothesis) > 0:
+                                confidence = result.hypothesis[0].score
+                                class_id = result.hypothesis[0].class_id
+                                semantic_class = f'class_{class_id}'
+
+                        # Modulate camera weight by confidence
+                        w_camera *= confidence
+
+                        # Normalize weights
+                        total_w = w_lidar + w_camera
+                        if total_w > 0:
+                            w_lidar /= total_w
+                            w_camera /= total_w
+
+                        # Fuse position
+                        lidar_3d = np.array([lidar_pos[0], lidar_pos[1], 0.0])
+                        camera_3d = np.array([cam_depth, 0.0, 0.0])  # Simplified
+                        fused_pos = w_lidar * lidar_3d + w_camera * camera_3d
+
+                        # Size from LiDAR (more reliable for extents)
+                        size = np.array([
+                            cluster['size'][0],
+                            cluster['size'][1],
+                            0.5
+                        ])
+
+                        obstacle = FusedObstacle(
+                            id=obstacle_id,
+                            position=fused_pos,
+                            size=size,
+                            confidence=0.3 * w_lidar + confidence * w_camera,
+                            semantic_class=semantic_class,
+                            source='fused'
+                        )
+                        fused_obstacles.append(obstacle)
+                        obstacle_id += 1
+                    else:
+                        # Unmatched LiDAR cluster - add as lidar-only
+                        position = np.array([lidar_pos[0], lidar_pos[1], 0.0])
+                        size = np.array([cluster['size'][0], cluster['size'][1], 0.5])
+
+                        obstacle = FusedObstacle(
+                            id=obstacle_id,
+                            position=position,
+                            size=size,
+                            confidence=0.6,
+                            semantic_class='unknown',
+                            source='lidar'
+                        )
+                        fused_obstacles.append(obstacle)
+                        obstacle_id += 1
+
+                # Add unmatched camera detections (if in FULL_FUSION mode)
+                if self.fusion_mode == FusionMode.FULL_FUSION:
+                    for j, detection in enumerate(yolo_detections):
+                        if j not in matched_detections:
+                            try:
+                                bbox = detection.bbox
+                                cx = int(bbox.center.position.x)
+                                cy = int(bbox.center.position.y)
+
+                                if (0 <= cy < depth_image.shape[0] and
+                                    0 <= cx < depth_image.shape[1]):
+
+                                    half_w = int(bbox.size_x / 4)
+                                    half_h = int(bbox.size_y / 4)
+                                    y_min = max(0, cy - half_h)
+                                    y_max = min(depth_image.shape[0], cy + half_h)
+                                    x_min = max(0, cx - half_w)
+                                    x_max = min(depth_image.shape[1], cx + half_w)
+
+                                    depth_patch = depth_image[y_min:y_max, x_min:x_max]
+                                    valid_depths = depth_patch[depth_patch > 0]
+
+                                    if len(valid_depths) > 0:
+                                        depth = np.median(valid_depths) / 1000.0
+
+                                        confidence = 0.5
+                                        semantic_class = 'unknown'
+                                        if len(detection.results) > 0:
+                                            result = detection.results[0]
+                                            if hasattr(result, 'hypothesis') and len(result.hypothesis) > 0:
+                                                confidence = result.hypothesis[0].score
+                                                class_id = result.hypothesis[0].class_id
+                                                semantic_class = f'class_{class_id}'
+
+                                        position = np.array([depth, 0.0, 0.0])
+                                        size = np.array([0.3, 0.3, 0.5])
+
+                                        obstacle = FusedObstacle(
+                                            id=obstacle_id,
+                                            position=position,
+                                            size=size,
+                                            confidence=confidence,
+                                            semantic_class=semantic_class,
+                                            source='camera'
+                                        )
+                                        fused_obstacles.append(obstacle)
+                                        obstacle_id += 1
+                            except:
+                                continue
+
+        except Exception as e:
+            self.get_logger().error(f'Fusion error: {e}')
+
+        return fused_obstacles
+
+    def _track_obstacles(self, current_obstacles: List[FusedObstacle]) -> List[FusedObstacle]:
+        """Apply simple obstacle tracking with exponential smoothing.
+
+        Args:
+            current_obstacles: Newly fused obstacles
+
+        Returns:
+            Tracked obstacles with smoothed positions
+        """
+        if not hasattr(self, 'tracked_obstacles'):
+            self.tracked_obstacles = {}
+
+        try:
+            # Associate current obstacles with tracked ones
+            tracked_output = []
+            matched_tracked = set()
+
+            for obs in current_obstacles:
+                best_match = None
+                best_dist = self.tracking_distance_threshold
+
+                # Find closest tracked obstacle
+                for track_id, tracked_obs in self.tracked_obstacles.items():
+                    if track_id in matched_tracked:
+                        continue
+
+                    dist = np.linalg.norm(obs.position - tracked_obs.position)
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_match = track_id
+
+                if best_match is not None:
+                    # Update tracked obstacle with exponential smoothing
+                    tracked_obs = self.tracked_obstacles[best_match]
+                    lambda_smooth = 0.7
+
+                    tracked_obs.position = (lambda_smooth * tracked_obs.position +
+                                           (1 - lambda_smooth) * obs.position)
+                    tracked_obs.confidence = max(tracked_obs.confidence, obs.confidence)
+                    tracked_obs.semantic_class = obs.semantic_class  # Update class
+
+                    matched_tracked.add(best_match)
+                    tracked_output.append(tracked_obs)
+                else:
+                    # New obstacle - assign new ID
+                    new_id = len(self.tracked_obstacles)
+                    obs.id = new_id
+                    self.tracked_obstacles[new_id] = obs
+                    tracked_output.append(obs)
+
+            # Remove unmatched tracked obstacles (lost tracking)
+            to_remove = []
+            for track_id in self.tracked_obstacles.keys():
+                if track_id not in matched_tracked:
+                    to_remove.append(track_id)
+
+            for track_id in to_remove:
+                del self.tracked_obstacles[track_id]
+
+            return tracked_output
+
+        except Exception as e:
+            self.get_logger().error(f'Tracking error: {e}')
+            return current_obstacles
+
+    def _publish_all_outputs(self, obstacles: List[FusedObstacle], header: Header):
+        """Publish all fusion outputs.
+
+        Args:
+            obstacles: List of fused obstacles to publish
+            header: Message header with timestamp and frame
+        """
+        try:
+            # Create MarkerArray for visualization
+            marker_array = MarkerArray()
+
+            for obs in obstacles:
+                # Create marker for each obstacle
+                marker = Marker()
+                marker.header = header
+                marker.header.frame_id = self.base_frame
+                marker.ns = "fused_obstacles"
+                marker.id = obs.id
+                marker.type = Marker.CUBE
+                marker.action = Marker.ADD
+
+                # Position
+                marker.pose.position.x = float(obs.position[0])
+                marker.pose.position.y = float(obs.position[1])
+                marker.pose.position.z = float(obs.position[2])
+                marker.pose.orientation.w = 1.0
+
+                # Size
+                marker.scale.x = max(float(obs.size[0]), 0.1)
+                marker.scale.y = max(float(obs.size[1]), 0.1)
+                marker.scale.z = max(float(obs.size[2]), 0.1)
+
+                # Color based on source
+                if obs.source == 'fused':
+                    marker.color = ColorRGBA(r=0.8, g=0.2, b=0.8, a=0.8)  # Purple
+                elif obs.source == 'lidar':
+                    marker.color = ColorRGBA(r=0.2, g=0.8, b=0.2, a=0.8)  # Green
+                else:  # camera
+                    marker.color = ColorRGBA(r=0.2, g=0.2, b=0.8, a=0.8)  # Blue
+
+                marker.lifetime = rclpy.duration.Duration(seconds=0.2).to_msg()
+                marker_array.markers.append(marker)
+
+            # Publish markers
+            self.obstacles_pub.publish(marker_array)
+
+            # Publish system status
+            status_msg = String()
+            status_msg.data = f"mode={self.fusion_mode.value},obstacles={len(obstacles)}"
+            self.status_pub.publish(status_msg)
+
+        except Exception as e:
+            self.get_logger().error(f'Publishing error: {e}')
+
+    def _publish_empty_outputs(self, header: Header):
+        """Publish empty outputs when no obstacles detected.
+
+        Args:
+            header: Message header
+        """
+        try:
+            # Empty marker array
+            marker_array = MarkerArray()
+            self.obstacles_pub.publish(marker_array)
+
+            # Status indicating no obstacles
+            status_msg = String()
+            status_msg.data = f"mode={self.fusion_mode.value},obstacles=0"
+            self.status_pub.publish(status_msg)
+
+        except Exception as e:
+            self.get_logger().error(f'Publishing empty error: {e}')
+
+    def _publish_diagnostics(self):
+        """Publish comprehensive diagnostics."""
+        try:
+            current_time = self.get_clock().now().nanoseconds / 1e9
+
+            # Prepare diagnostics string
+            diag_str = f"""
+SENSOR FUSION DIAGNOSTICS
+========================
+Mode: {self.fusion_mode.value}
+Total Fusions: {self.fusion_count}
+Successful: {self.successful_fusions}
+Failed: {self.failed_fusions}
+Success Rate: {100*self.successful_fusions/max(self.fusion_count,1):.1f}%
+
+Sensor Health:
+- LiDAR: {self.sensor_health['lidar'].status.value} (msgs: {self.sensor_health['lidar'].message_count})
+- YOLO: {self.sensor_health['yolo'].status.value} (msgs: {self.sensor_health['yolo'].message_count})
+- Depth: {self.sensor_health['depth'].status.value} (msgs: {self.sensor_health['depth'].message_count})
+
+Mode Changes: {self.mode_changes}
+"""
+
+            # Publish diagnostics
+            diag_msg = String()
+            diag_msg.data = diag_str
+            self.diagnostics_pub.publish(diag_msg)
+
+        except Exception as e:
+            self.get_logger().error(f'Diagnostics publishing error: {e}')
 
 
 def main(args=None):
