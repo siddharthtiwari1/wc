@@ -1,0 +1,104 @@
+% Problem Formulation
+\label{sec:problem}
+
+\subsection{Task Definition}
+
+\textbf{Input}: A mobile robot equipped with RGB-D camera and 2D LiDAR receives
+a natural language instruction $\mathcal{I}$ describing a destination object
+via attributes:
+
+\begin{equation}
+\mathcal{I} = \text{``go to the } \underbrace{\text{red}}_{\text{color}} \text{ }
+\underbrace{\text{mug}}_{\text{category}} \text{ on the }
+\underbrace{\text{wooden}}_{\text{material}} \text{ }
+\underbrace{\text{table}}_{\text{relation}}\text{''}
+\end{equation}
+
+\textbf{Output}: A navigation trajectory $\tau = (s_0, a_0, s_1, \ldots, s_T)$
+that brings the robot within $\epsilon = 1.0\,\text{m}$ of the target object's
+centroid $\mathbf{p}_{\text{goal}}$ while satisfying all specified attributes.
+
+\subsection{Attribute Representation}
+
+We decompose instructions into structured attribute tuples:
+
+\begin{equation}
+\mathcal{A} = \{\text{category}, \text{color}, \text{shape}, \text{material},
+\text{relations}\}
+\end{equation}
+
+Each attribute $a \in \mathcal{A}$ is represented as:
+\begin{itemize}
+    \item \textbf{Value} $v_a \in \mathcal{V}_a$: The attribute label
+    (\textit{e.g.}, ``red'', ``curved'')
+
+    \item \textbf{Confidence} $c_a \in [0, 1]$: Per-attribute uncertainty estimate
+
+    \item \textbf{Embedding} $\mathbf{e}_a \in \mathbb{R}^d$: CLIP-encoded
+    semantic vector
+\end{itemize}
+
+\subsection{3D Semantic Map}
+
+The environment is represented as a set of object instances
+$\mathcal{O} = \{O_1, \ldots, O_M\}$, where each instance $O_k$ contains:
+
+\begin{align}
+O_k = \{&\mathbf{P}_k, \mathbf{B}_k, \mathbf{e}_k, \mathcal{A}_k, C_k, \Phi_k\}
+\end{align}
+
+\begin{itemize}
+    \item $\mathbf{P}_k \subset \mathbb{R}^3$: 3D point cloud in world frame
+    \item $\mathbf{B}_k$: Axis-aligned bounding box (min, max corners)
+    \item $\mathbf{e}_k \in \mathbb{R}^d$: Multi-modal embedding (DINOv2 + CLIP)
+    \item $\mathcal{A}_k$: Attribute set with per-attribute confidence
+    \item $C_k$: Instance confidence (multi-view consistency score)
+    \item $\Phi_k$: Provenance (frame IDs, views, timestamps)
+\end{itemize}
+
+\subsection{Success Criteria}
+
+We define three evaluation metrics:
+
+\paragraph{Subgoal Success Rate (SSR)}
+For a dataset with $N$ instructions, each containing $V_i$ valid subgoals
+(non-absent objects), of which $S_i$ are successfully reached:
+
+\begin{equation}
+\text{SSR} = \frac{\sum_{i=1}^{N} S_i}{\sum_{i=1}^{N} V_i} \times 100\%
+\end{equation}
+
+\paragraph{Full-Chain Completion (FCC)}
+Percentage of multi-step instructions ($V_i = K$ subgoals) where all $K$
+subgoals are reached in sequence:
+
+\begin{equation}
+\text{FCC} = \frac{|\{i : V_i = K \land S_i = K\}|}{|\{i : V_i = K\}|} \times 100\%
+\end{equation}
+
+\paragraph{Attribute Precision \& Recall}
+Let $\mathcal{A}_{\text{pred}}$ be the attributes of the reached object and
+$\mathcal{A}_{\text{true}}$ the ground-truth attributes:
+
+\begin{align}
+\text{Precision} &= \frac{|\mathcal{A}_{\text{pred}} \cap \mathcal{A}_{\text{true}}|}{|\mathcal{A}_{\text{pred}}|} \\
+\text{Recall} &= \frac{|\mathcal{A}_{\text{pred}} \cap \mathcal{A}_{\text{true}}|}{|\mathcal{A}_{\text{true}}|}
+\end{align}
+
+\subsection{Challenges}
+
+\textbf{C1. Attribute Compositionality}: Instructions specify conjunctions
+(\textit{red} AND \textit{ceramic}), not single features. Monolithic embeddings
+cannot enforce both.
+
+\textbf{C2. View Dependence}: Color varies with lighting; shape with viewing
+angle. Single-view estimates are unreliable.
+
+\textbf{C3. Ambiguity}: Multiple objects may partially match (\textit{e.g.}, two
+red mugs, one ceramic, one glass). Binary decisions fail; confidence scores are
+needed.
+
+\textbf{C4. Dynamics}: Objects move in real homes. Static maps become stale.
+
+\textbf{C5. Sim-to-Real Gap}: Simulated sensors are noise-free; real depth maps
+exhibit holes, motion blur, and calibration errors.

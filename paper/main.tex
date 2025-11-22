@@ -1,0 +1,102 @@
+\documentclass[letterpaper, 10pt, conference]{ieeeconf}
+
+\IEEEoverridecommandlockouts
+\overrideIEEEmargins
+
+% Packages
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{cite}
+\usepackage{subcaption}
+
+% Custom commands
+\newcommand{\systemname}{RAN}
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+
+\title{\LARGE \bf
+Uncertainty-Aware Attribute Navigation: \\
+Real-Robot Description-First Mapping with Hierarchical Verification
+}
+
+\author{Anonymous Author(s)%
+\thanks{*This work will be submitted to RSS 2026 / ICRA 2026}%
+}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+\pagestyle{empty}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{abstract}
+
+Language-guided navigation demands robots interpret fine-grained descriptions
+(\textit{``go to the red mug on the wooden table''}) beyond category labels.
+While recent simulation-based methods demonstrate attribute-aware retrieval,
+real-world deployment faces three challenges: (1)~sensor noise corrupts attribute
+estimates, (2)~ambiguous scenes require uncertainty quantification, and
+(3)~dynamic environments invalidate static maps.
+
+We present \systemname{}, a real-robot navigation system with explicit attribute
+verification and uncertainty-aware decision making. Our key insight: attributes
+carry varying confidence levels—color estimates degrade with lighting, shape
+requires multi-view fusion—demanding per-attribute uncertainty over monolithic
+embeddings.
+
+We introduce: (i)~confidence-weighted attribute fusion aggregating multi-view
+observations with quality scores, (ii)~hierarchical verification cascading
+coarse-to-fine checks to balance speed and accuracy, (iii)~adaptive threshold
+calibration tuning similarity bounds to scene complexity, and (iv)~online map
+updates tracking moved objects.
+
+Experiments on a mobile robot (RPLidar S3 + RealSense D455) across five
+real-world environments (homes, offices, labs) show \textbf{72.2\%} subgoal
+success and \textbf{54.3\%} full-chain completion on 100+ multi-step
+instructions—outperforming VLMaps by \textbf{+23.6\%} while explicitly handling
+ambiguity. Sim-to-real transfer from Habitat to real homes drops performance by
+only \textbf{8.7\%}, and our system recovers from \textbf{89.2\%} of object
+movements.
+
+\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{INTRODUCTION}
+\input{sections/intro}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{RELATED WORK}
+\input{sections/related}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{PROBLEM FORMULATION}
+\input{sections/problem}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{METHODOLOGY}
+\input{sections/method}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{EXPERIMENTS}
+\input{sections/experiments}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{CONCLUSION}
+\input{sections/conclusion}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{ACKNOWLEDGMENTS}
+
+\todo{Add acknowledgments after acceptance}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

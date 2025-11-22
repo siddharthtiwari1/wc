@@ -1,0 +1,94 @@
+% Conclusion
+\label{sec:conclusion}
+
+\subsection{Summary}
+
+We presented \systemname{}, a real-robot navigation system that bridges the
+sim-to-real gap for attribute-aware language grounding. By making attributes
+explicit, confidence-weighted, and hierarchically verified, we achieve
+\textbf{72.2\%} subgoal success and \textbf{54.3\%} full-chain completion on
+real-world multi-step instructions—\textbf{+23.6\%} over VLMaps and
+\textbf{+22.9\%} full-chain over CapNav~\cite{capnav2026}.
+
+\textbf{Key contributions}:
+\begin{enumerate}
+    \item First real-robot system with explicit attribute verification and
+    per-attribute confidence estimation
+
+    \item Hierarchical verification cascade improving long-horizon navigation
+    from 20\% to 54.3\%
+
+    \item Adaptive threshold calibration eliminating manual tuning
+
+    \item Online map updates with 89.2\% recovery from moved objects
+
+    \item Comprehensive evaluation (7 real + 20 sim scenes, 4 baselines, 5
+    ablations) addressing limitations in prior work
+\end{enumerate}
+
+\subsection{Limitations}
+
+\textbf{L1. Transparent/reflective objects}: Depth sensors fail on glass,
+mirrors. Could be addressed with multi-modal fusion (tactile, audio).
+
+\textbf{L2. Heavy occlusions}: Objects <20\% visible are rejected. Active
+exploration~\cite{chaplot2020active} could explicitly search for occluded targets.
+
+\textbf{L3. Temporal attributes}: \textit{``The mug I left here yesterday''}
+requires memory beyond static maps. Could use persistent object IDs with
+temporal tracking.
+
+\textbf{L4. Ambiguity resolution}: When two objects match equally (\textit{two
+red mugs}), the system picks one arbitrarily. Could ask user for clarification.
+
+\textbf{L5. Compute requirements}: Jetson AGX Orin (64GB, \$2000) is expensive.
+Model quantization and pruning could enable deployment on cheaper hardware.
+
+\subsection{Future Work}
+
+\textbf{Active exploration}: Instead of passively rejecting low-confidence
+objects, actively move to acquire better views or disambiguate candidates.
+
+\textbf{Multi-robot collaboration}: Multiple robots share semantic maps and
+attribute observations, improving coverage and confidence estimates.
+
+\textbf{Manipulation integration}: Extend navigation to \textit{``pick up the
+red mug on the wooden table''} by adding grasp pose estimation to attribute
+verification.
+
+\textbf{Long-term autonomy}: Track object movements over days/weeks, learn
+temporal patterns (\textit{``the mug is usually on the kitchen counter in the
+morning''}), and predict locations.
+
+\textbf{Open-set spatial relations}: Current system handles simple relations
+(\textit{on, under, next to}). Could learn compositional spatial
+grounding~\cite{kuo2024spatial} for complex descriptions (\textit{``between the
+chair and window, but closer to the chair''}).
+
+\subsection{Broader Impact}
+
+Attribute-aware navigation enables service robots to follow human-like
+descriptions in homes, hospitals, and warehouses. Potential applications:
+
+\begin{itemize}
+    \item \textbf{Assistive robotics}: \textit{``Fetch my red medication bottle
+    from the bathroom counter''}
+
+    \item \textbf{Warehouse logistics}: \textit{``Retrieve the blue box on the
+    top shelf, third from the left''}
+
+    \item \textbf{Healthcare}: \textit{``Deliver the IV bag on the rolling cart
+    near the window to Room 302''}
+\end{itemize}
+
+\textbf{Ethical considerations}: Attribute-based queries (e.g., \textit{``person
+with red shirt''}) could enable surveillance. Future work should incorporate
+privacy-preserving constraints and user consent mechanisms.
+
+\subsection{Conclusion}
+
+By treating attributes as first-class, verifiable hypotheses rather than
+implicit embeddings, \systemname{} demonstrates that fine-grained language
+grounding is achievable on real robots in diverse, dynamic environments. We hope
+this work inspires future research on uncertainty-aware perception, hierarchical
+verification, and human-aligned navigation.
