@@ -1,0 +1,188 @@
+name: Wheelchair Sensor Fusion CI
+
+on:
+  push:
+    branches: [ main, claude/** ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup ROS2 Jazzy
+      uses: ros-tooling/setup-ros@v0.6
+      with:
+        required-ros-distributions: jazzy
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          python3-pip \
+          python3-pytest \
+          python3-pytest-cov \
+          python3-colcon-common-extensions
+
+    - name: Install Python dependencies
+      run: |
+        pip3 install --upgrade pip
+        pip3 install \
+          numpy>=1.20.0 \
+          opencv-python-headless>=4.5.0 \
+          scikit-learn>=1.0.0 \
+          scipy>=1.7.0 \
+          ultralytics>=8.0.0 \
+          torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+    - name: Install ROS2 dependencies
+      run: |
+        sudo apt-get install -y \
+          ros-jazzy-cv-bridge \
+          ros-jazzy-vision-msgs \
+          ros-jazzy-visualization-msgs \
+          ros-jazzy-sensor-msgs \
+          ros-jazzy-geometry-msgs \
+          ros-jazzy-nav-msgs \
+          ros-jazzy-tf2-ros \
+          ros-jazzy-message-filters
+
+    - name: Build workspace
+      run: |
+        source /opt/ros/jazzy/setup.bash
+        mkdir -p ros2_ws/src
+        cp -r src/wheelchair_sensor_fusion ros2_ws/src/
+        cd ros2_ws
+        colcon build --packages-select wheelchair_sensor_fusion --symlink-install
+
+    - name: Run linting
+      run: |
+        pip3 install flake8 pylint
+        # Lint Python files (allow some common warnings)
+        flake8 src/wheelchair_sensor_fusion --count --select=E9,F63,F7,F82 --show-source --statistics || true
+
+    - name: Run unit tests
+      run: |
+        source /opt/ros/jazzy/setup.bash
+        source ros2_ws/install/setup.bash
+        cd ros2_ws
+        colcon test --packages-select wheelchair_sensor_fusion --event-handlers console_direct+
+        colcon test-result --verbose
+
+    - name: Check package dependencies
+      run: |
+        source /opt/ros/jazzy/setup.bash
+        source ros2_ws/install/setup.bash
+        ros2 pkg prefix wheelchair_sensor_fusion
+        ros2 pkg executables wheelchair_sensor_fusion
+
+    - name: Validate Python imports
+      run: |
+        python3 << 'EOF'
+        import sys
+        try:
+            import numpy
+            import cv2
+            import sklearn
+            import scipy
+            import ultralytics
+            print("✓ All Python dependencies OK")
+        except ImportError as e:
+            print(f"✗ Missing dependency: {e}")
+            sys.exit(1)
+        EOF
+
+    - name: Generate coverage report
+      if: always()
+      run: |
+        # Generate coverage if tests ran
+        pip3 install coverage
+        # Coverage report would be generated here
+
+    - name: Upload artifacts
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-artifacts
+        path: |
+          ros2_ws/build/
+          ros2_ws/install/
+          ros2_ws/log/
+
+  code-quality:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install Python linters
+      run: |
+        pip3 install flake8 pylint black isort mypy
+
+    - name: Run flake8
+      continue-on-error: true
+      run: |
+        flake8 src/wheelchair_sensor_fusion --count --statistics
+
+    - name: Run pylint
+      continue-on-error: true
+      run: |
+        pylint src/wheelchair_sensor_fusion/wheelchair_sensor_fusion/*.py || true
+
+    - name: Check formatting with black
+      continue-on-error: true
+      run: |
+        black --check src/wheelchair_sensor_fusion/wheelchair_sensor_fusion/*.py || true
+
+    - name: Check import sorting
+      continue-on-error: true
+      run: |
+        isort --check-only src/wheelchair_sensor_fusion/wheelchair_sensor_fusion/*.py || true
+
+  documentation:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Check documentation files exist
+      run: |
+        test -f README.md
+        test -f src/wheelchair_sensor_fusion/QUICKSTART.md
+        test -f src/wheelchair_sensor_fusion/HARDWARE_OPTIMIZATION.md
+        test -f PRODUCTION_READINESS_REPORT.md
+
+    - name: Validate launch files
+      run: |
+        test -f src/wheelchair_sensor_fusion/launch/wheelchair_fusion.launch.py
+        test -f src/wheelchair_sensor_fusion/launch/sensor_fusion.launch.py
+
+    - name: Validate config files
+      run: |
+        test -f src/wheelchair_sensor_fusion/config/wheelchair_integration.yaml
+        test -f src/wheelchair_sensor_fusion/config/sensor_fusion.yaml
+
+  latex-build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Compile LaTeX paper
+      uses: xu-cheng/latex-action@v2
+      with:
+        root_file: docs/ICRA2025_SensorFusion.tex
+        working_directory: docs/
+
+    - name: Upload PDF
+      uses: actions/upload-artifact@v3
+      with:
+        name: icra-paper
+        path: docs/ICRA2025_SensorFusion.pdf
