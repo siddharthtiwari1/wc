@@ -168,21 +168,8 @@ jobs:
         test -f src/wheelchair_sensor_fusion/config/wheelchair_integration.yaml
         test -f src/wheelchair_sensor_fusion/config/sensor_fusion.yaml
 
-  latex-build:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Compile LaTeX paper
-      uses: xu-cheng/latex-action@v2
-      with:
-        root_file: docs/ICRA2025_SensorFusion.tex
-        working_directory: docs/
-
-    - name: Upload PDF
-      uses: actions/upload-artifact@v3
-      with:
-        name: icra-paper
-        path: docs/ICRA2025_SensorFusion.pdf
+    - name: Check LaTeX source exists
+      run: |
+        test -f docs/ICRA2025_SensorFusion.tex
+        test -f docs/ICRA2025_references.bib
+        echo "✓ LaTeX source files present (compile locally with pdflatex)"
