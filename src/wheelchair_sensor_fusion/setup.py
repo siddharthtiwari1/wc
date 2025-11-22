@@ -28,11 +28,9 @@ setup(
     entry_points={
         'console_scripts': [
             'sensor_fusion_node = wheelchair_sensor_fusion.sensor_fusion_node:main',
+            'sensor_fusion_node_robust = wheelchair_sensor_fusion.sensor_fusion_node_robust:main',
             'yolo_detector_node = wheelchair_sensor_fusion.yolo_detector_node:main',
             'lidar_processor_node = wheelchair_sensor_fusion.lidar_processor_node:main',
-            'camera_processor_node = wheelchair_sensor_fusion.camera_processor_node:main',
-            'fusion_visualizer_node = wheelchair_sensor_fusion.fusion_visualizer_node:main',
-            'calibration_node = wheelchair_sensor_fusion.calibration_node:main',
             'obstacle_publisher_node = wheelchair_sensor_fusion.obstacle_publisher_node:main',
         ],
     },
