@@ -11,19 +11,13 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/config', [
+            # EKF sensor fusion configs
             'config/ekf.yaml',
             'config/ekf_global.yaml',
-            'config/slam_toolbox.yaml',
-            'config/slam_toolbox_mapping.yaml',
-            'config/slam_toolbox_s3_cluttered_indoor.yaml',
-            'config/slam_toolbox_s3_aggressive.yaml',
-            'config/slam_toolbox_s3_optimized.yaml',
-            'config/slam_toolbox_s3_pro.yaml',
-            'config/slam_toolbox_s3_white_walls.yaml',
-            'config/slam_toolbox_wheelchair_optimized.yaml',
-            'config/slam_toolbox_high_quality.yaml',
+            # SLAM Toolbox mapping config (PRODUCTION - SOURCE CODE VERIFIED)
+            'config/slam_toolbox_v14r25_FINAL.yaml',
+            # AMCL localization configs
             'config/amcl.yaml',
-            'config/amcl_wheelchair_optimized.yaml'
         ]),
         ('share/' + package_name + '/launch', [
             'launch/local_localization.launch.py',

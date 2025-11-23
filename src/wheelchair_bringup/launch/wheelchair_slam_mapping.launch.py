@@ -39,10 +39,21 @@ def generate_launch_description():
         'rviz',
         'slam_mapping.rviz',
     )
+    # SLAM configuration options:
+    # - slam_toolbox_v14r7_hector_hybrid.yaml: HECTOR HYBRID (0.3m search, 2mm res, 0.75/0.75) [NEW!]
+    # - slam_toolbox_v14_pro.yaml: Maximum quality Hector-style (3.4° + 2cm res, ~65% CPU)
+    # - slam_toolbox_v14r6.yaml: Symmetric 0.75/0.75 (0.6m search, no leaks fix)
+    # - slam_toolbox_v14r5.yaml: Maximum rotation trust (corners good, but scan leaks)
+    # - slam_toolbox_v14r4.yaml: Stable odometry-led (60% both, but rotation still reorients)
+    # - slam_toolbox_v14r3.yaml: Rotation-aware (poor results - position instability)
+    # - slam_toolbox_v14r2.yaml: Geometry-first (sharp L-corners, 5mm precision, but rotation issues)
+    # - slam_toolbox_v14r1.yaml: Optimized for excellent odometry (3.4°, 2cm, loop closure)
+    # - slam_toolbox_v14.yaml: Balanced config (5° threshold, ~35% CPU, good results)
+    # - slam_toolbox_v2.yaml: Legacy config (poor results, not recommended)
     default_slam_config = os.path.join(
         wheelchair_localization_dir,
         'config',
-        'slam_toolbox.yaml',
+        'slam_toolbox_v14r25_FINAL.yaml',  # SOURCE CODE VERIFIED - FINAL CONFIG
     )
     # Detect ROS distro for compatibility
     ros_distro = os.environ.get('ROS_DISTRO', 'jazzy')

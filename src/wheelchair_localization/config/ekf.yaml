@@ -66,11 +66,12 @@ ekf_filter_node:
       # Wheel Odometry Configuration - Wheelchair differential drive  
       odom0: /wc_control/odom
 
-      # FIXED: Orientation bug resolved - now fusing position AND velocity
-      # Position (x,y) gives absolute reference, velocity smooths motion
+      # FIXED: Removed yaw from wheel odometry to prevent drift
+      # Wheels provide: x, y position and x velocity (what they're good at)
+      # IMU provides: yaw orientation (what it's good at)
       # Order: x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
       odom0_config: [true,  true,  false,    # x, y position - accurate from wheel encoders
-                     false, false, true,     # yaw from IMU (orientation now correct!)
+                     false, false, false,    # NO YAW from wheels - prevents drift!
                      true,  false, false,    # x_vel from wheels for smooth integration
                      false, false, false,    # angular velocities (from IMU)
                      false, false, false]    # accelerations (none)
