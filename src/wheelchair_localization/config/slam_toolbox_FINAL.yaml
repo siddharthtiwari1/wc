@@ -1,0 +1,466 @@
+# ============================================================================
+# SLAM Toolbox FINAL Configuration - Complete Parameter List
+# ============================================================================
+# Created: 2025-11-23
+# Based on: Deep analysis of slam_toolbox source code + Hector SLAM comparison
+# For: RPLidar S3 + Excellent Odometry (EKF: wheels+IMU) + Cluttered Indoor
+# Optimized for: Sharp 90° corners, stable trajectory, loop closure
+#
+# KEY FINDINGS:
+# - slam_toolbox defaults (distance: 0.5, angle: 1.0) trust scan matching too much
+# - Hector SLAM worked because it ignores odometry (pure scan matching)
+# - Solution: LOW angle_variance_penalty (0.25) to preserve odometry's sharp turns
+# - Formula: penalty = 1.0 - (0.2 * deviation² / variance_penalty)
+#   → LOWER variance_penalty = MORE penalty = TRUST ODOMETRY
+#   → HIGHER variance_penalty = LESS penalty = TRUST SCAN MATCHING
+#
+# RESULTS EXPECTED:
+# ✅ Sharp 90° corners (89-90°, not slanted 87-88°)
+# ✅ Stable blue trajectory (no freezing during rotation)
+# ✅ Successful loop closure in cluttered environment
+# ✅ No initial scan mismatch
+# ✅ No scan leaks through walls
+# ============================================================================
+
+slam_toolbox:
+  ros__parameters:
+
+    # ========================================================================
+    # SOLVER CONFIGURATION
+    # ========================================================================
+    # Ceres Solver for graph optimization
+
+    solver_plugin: solver_plugins::CeresSolver
+
+    # Linear solver: SPARSE_NORMAL_CHOLESKY is fastest for 2D SLAM
+    # Alternatives: SPARSE_SCHUR, DENSE_QR, DENSE_NORMAL_CHOLESKY
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+
+    # Preconditioner for iterative solver
+    # SCHUR_JACOBI provides good convergence for SLAM problems
+    ceres_preconditioner: SCHUR_JACOBI
+
+    # Trust region strategy for optimization
+    # LEVENBERG_MARQUARDT is robust and works well for SLAM
+    # Alternative: DOGLEG
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+
+    # Dogleg type (used if trust_strategy is DOGLEG)
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+
+    # Loss function for outlier rejection
+    # CRITICAL: HuberLoss is essential for cluttered environments!
+    # - None: Standard least-squares (outliers heavily affect solution)
+    # - HuberLoss: Robust to outliers (perfect for clutter/dynamic objects)
+    # - CauchyLoss: Very robust but slower
+    ceres_loss_function: HuberLoss
+
+    # ========================================================================
+    # ROS PARAMETERS - Frame & Topic Configuration
+    # ========================================================================
+
+    # Frame names (must match your robot's TF tree)
+    odom_frame: odom           # Odometry frame (published by EKF)
+    map_frame: map             # Global map frame
+    base_frame: base_link      # Robot base frame
+
+    # Scan topic
+    scan_topic: /scan          # RPLidar S3 publishes here
+
+    # Map saving
+    use_map_saver: true        # Enable map saver server
+
+    # Operating mode
+    # - mapping: Create new map
+    # - localization: Use existing map
+    mode: mapping
+
+    # Optional: Load existing map
+    # map_file_name: /path/to/map
+    # map_start_pose: [x, y, theta]  # Start pose in loaded map
+    # map_start_at_dock: true        # Start at docking station
+
+    # ========================================================================
+    # PERFORMANCE PARAMETERS
+    # ========================================================================
+
+    # Debug output
+    debug_logging: false       # Set true for troubleshooting
+
+    # Scan processing
+    throttle_scans: 1          # Process every Nth scan (1 = all scans)
+                              # RPLidar S3: 10Hz, 3200 points/scan
+                              # Don't skip scans with good hardware!
+
+    # TF publishing rate
+    transform_publish_period: 0.02    # 50Hz (fast enough for Nav2)
+
+    # Map update interval
+    map_update_interval: 1.0   # Update occupancy grid every 1.0s
+                              # Default: 5.0 (too slow for real-time mapping)
+                              # Range: 0.5-2.0 for responsive mapping
+
+    # Map resolution
+    resolution: 0.025          # 2.5cm cell size
+                              # Hector default: 0.05 (5cm)
+                              # Finer resolution for large rectangular obstacles
+                              # Range: 0.02-0.05 for indoor
+
+    # Laser range limits
+    max_laser_range: 12.0      # Use up to 12m (match your environment)
+                              # RPLidar S3: up to 40m capable
+                              # Set to room diagonal for indoor
+    min_laser_range: 0.0       # Minimum range (usually 0.0)
+
+    # Scan timing
+    minimum_time_interval: 0.1 # Process scans every 0.1s minimum (10Hz)
+                              # CRITICAL: Match RPLidar S3's 10Hz scan rate!
+                              # Default: 0.5s throws away 80% of scans!
+                              # DO NOT set below 1/scan_rate
+
+    # TF timeout
+    transform_timeout: 0.2     # Wait up to 0.2s for TF transforms
+
+    # TF buffer duration
+    tf_buffer_duration: 30.0   # Keep 30s of TF history
+
+    # Stack size for solver
+    stack_size_to_use: 40000000  # 40MB stack (default is fine)
+
+    # Interactive mode (RViz plugin)
+    enable_interactive_mode: true  # Enable SLAM Toolbox RViz panel
+
+    # ========================================================================
+    # MOVEMENT THRESHOLDS - When to Process New Scans
+    # ========================================================================
+
+    # Scan matching
+    use_scan_matching: true    # Enable scan-to-map matching (always true)
+    use_scan_barycenter: true  # Use scan centroid for matching
+
+    # Minimum travel distance before processing new scan
+    minimum_travel_distance: 0.15  # 15cm
+                                  # Cluttered environment: 0.1-0.2m (many features)
+                                  # Open space: 0.3-0.5m (fewer features)
+                                  # Hector default: 0.4m
+
+    # Minimum rotation before processing new scan
+    minimum_travel_heading: 0.10   # 5.7°
+                                  # CRITICAL for smooth rotation tracking!
+                                  # Too high → trajectory freezes during turns
+                                  # Too low → too many scans, noise
+                                  # Hector default: 0.06 rad (3.4°)
+                                  # Recommended: 0.08-0.12 rad (4.5-7°)
+
+    # Scan buffer
+    scan_buffer_size: 50       # Number of scans to buffer
+                              # RPLidar S3: 3200 points/scan at 10Hz
+                              # Larger buffer for high-rate dense scans
+                              # Default: 10 (too small for S3!)
+
+    scan_buffer_maximum_scan_distance: 10.0  # Max distance between buffered scans
+
+    # ========================================================================
+    # SCAN MATCHING QUALITY - Link Match Thresholds
+    # ========================================================================
+
+    # Minimum correlation response for accepting scan match
+    link_match_minimum_response_fine: 0.25
+                              # CRITICAL for trajectory stability!
+                              # Too high (0.3-0.4) → trajectory freezes during rotation
+                              # Too low (0.1-0.15) → accepts bad matches, noisy map
+                              # Default: 0.1 (too permissive)
+                              # Cluttered: 0.2-0.28 (balance quality vs stability)
+                              # Open: 0.15-0.2 (relaxed for fewer features)
+
+    # Maximum distance between linked scans
+    link_scan_maximum_distance: 1.5
+                              # How far to search for scan-to-scan links
+                              # Smaller = more conservative linking
+                              # Cluttered: 1.5-2.0m
+                              # Open: 2.5-3.0m
+                              # Default: 1.5m
+
+    # ========================================================================
+    # LOOP CLOSURE PARAMETERS
+    # ========================================================================
+
+    # Enable loop closure
+    do_loop_closing: true      # Essential for long-term accuracy!
+                              # Hector SLAM lacks this → drifts over time
+
+    # Loop search distance
+    loop_search_maximum_distance: 15.0
+                              # How far to search for loop closures
+                              # Should match environment perimeter/diagonal
+                              # Your 10m × 8m room: diagonal = 12.8m
+                              # Conservative: 12-15m
+                              # Large space: 20-30m
+                              # Default: 3.0m (too small!)
+
+    # Minimum chain size for loop closure
+    loop_match_minimum_chain_size: 8
+                              # Number of consecutive matches needed
+                              # Higher = stricter (fewer false positives)
+                              # Lower = more closures (may be false)
+                              # Default: 10
+                              # Cluttered: 6-8 (features everywhere)
+                              # Open: 10-15 (need more confirmation)
+
+    # Coarse loop closure variance threshold
+    loop_match_maximum_variance_coarse: 4.0
+                              # Maximum variance for coarse loop matching
+                              # Cluttered environments have high feature variance
+                              # Default: 3.0
+                              # Cluttered: 4.0-5.0
+                              # Open: 2.5-3.5
+
+    # Loop closure correlation thresholds
+    loop_match_minimum_response_coarse: 0.35
+                              # Coarse matching quality threshold
+                              # Default: 0.35-0.40
+                              # Cluttered: 0.30-0.35 (relaxed)
+                              # Open: 0.40-0.50 (strict)
+
+    loop_match_minimum_response_fine: 0.45
+                              # Fine matching quality threshold
+                              # Default: 0.45-0.50
+                              # Cluttered: 0.40-0.45 (relaxed)
+                              # Open: 0.50-0.60 (strict)
+
+    # ========================================================================
+    # CORRELATION PARAMETERS - Scan Matching Search Space
+    # ========================================================================
+
+    # Search space dimension (position)
+    correlation_search_space_dimension: 1.0
+                              # ±1.0m search window around odometry pose
+                              # CRITICAL for initial scan convergence!
+                              # Too narrow (0.5-0.7m) → initial scan mismatch
+                              # Too wide (1.5-2.0m) → slow, may find wrong match
+                              # Excellent odometry: 0.8-1.0m
+                              # Poor odometry: 1.2-1.5m
+                              # Default: 0.5m (often too narrow!)
+
+    # Search space resolution (position)
+    correlation_search_space_resolution: 0.01
+                              # Grid cell size for search (1cm)
+                              # Finer = more accurate but slower
+                              # Default: 0.01m (1cm) is good
+                              # Range: 0.005-0.02m
+
+    # Smear deviation (correlation smoothing)
+    correlation_search_space_smear_deviation: 0.05
+                              # Gaussian smoothing of correlation peaks
+                              # Lower = sharper peaks, better for accurate sensors
+                              # Higher = smoother peaks, more robust to noise
+                              # RPLidar S3 (±30mm accuracy): 0.03-0.05
+                              # Default: 0.05m
+
+    # ========================================================================
+    # LOOP CLOSURE CORRELATION PARAMETERS
+    # ========================================================================
+
+    # Loop closure search space
+    loop_search_space_dimension: 12.0
+                              # Should match your environment size
+                              # Your room: 10m × 8m → use 10-12m
+                              # Default: 8.0m
+
+    loop_search_space_resolution: 0.05
+                              # Coarser than regular matching (faster)
+                              # Default: 0.05m (5cm) is fine
+
+    loop_search_space_smear_deviation: 0.03
+                              # Tighter than regular matching
+                              # Default: 0.03m
+
+    # ========================================================================
+    # VARIANCE PENALTIES - THE MOST CRITICAL PARAMETERS!
+    # ========================================================================
+    # These control odometry vs scan matching trust
+    #
+    # SOURCE CODE FORMULA (Mapper.cpp):
+    # ┌─────────────────────────────────────────────────────────────────┐
+    # │ distancePenalty = 1.0 - (0.2 * deviation² / distance_variance)  │
+    # │ anglePenalty = 1.0 - (0.2 * deviation² / angle_variance)        │
+    # │ finalResponse *= (distancePenalty * anglePenalty)               │
+    # └─────────────────────────────────────────────────────────────────┘
+    #
+    # Since variance_penalty is in DENOMINATOR:
+    # - LOWER value → larger penalty → scan matches that deviate from
+    #   odometry are rejected → TRUST ODOMETRY MORE
+    # - HIGHER value → smaller penalty → scan matches that deviate are
+    #   accepted → TRUST SCAN MATCHING MORE
+    #
+    # DEFAULTS:
+    # - Code (Karto SDK): distance=0.09, angle=0.12 (both LOW = trust odometry)
+    # - ROS config: distance=0.5, angle=1.0 (moderate scan trust)
+    #
+    # WHY YOUR v14r6 (0.75/0.75) FAILED:
+    # - You thought: "0.75 = 75% odometry trust" ❌ BACKWARDS!
+    # - Actually: 0.75 is HIGHER than default → MORE scan trust
+    # - Result: Scan matching smoothed your 90° turns → slanted corners
+    #
+    # WHY HECTOR SLAM WORKED:
+    # - Pure scan matching (odometry ignored completely)
+    # - No variance penalties needed
+    # - Result: 100% geometry preservation → sharp 90° corners
+    #
+    # THE FIX:
+    # - Use LOW angle_variance_penalty to preserve excellent odometry rotation
+    # - Mimic Hector's geometry trust while keeping loop closure benefits
+    # ========================================================================
+
+    # Distance variance penalty (position trust)
+    distance_variance_penalty: 0.5
+                              # MODERATE: Allow scan matching for position correction
+                              # 0.5 = ROS default (balanced 50/50 ish)
+                              # Range interpretation:
+                              #   0.09: Code default (maximum odometry trust)
+                              #   0.3-0.4: High odometry trust
+                              #   0.5-0.6: Balanced (recommended for good odometry)
+                              #   0.7-1.0: High scan matching trust
+                              #   1.0+: Maximum scan trust (poor odometry)
+
+    # Angle variance penalty (rotation trust)
+    angle_variance_penalty: 0.25
+                              # LOW: Trust your excellent odometry rotation!
+                              # CRITICAL FOR SHARP 90° CORNERS!
+                              # 0.25 << 1.0 (default) = MUCH more odometry trust
+                              # Result: Preserves odometry's sharp 90° turns
+                              #
+                              # Range interpretation:
+                              #   0.12: Code default (maximum odometry trust, Hector-like)
+                              #   0.15-0.20: Very high odometry trust (sharpest corners)
+                              #   0.25-0.30: High odometry trust (recommended) ✓
+                              #   0.4-0.6: Moderate (some smoothing)
+                              #   0.75: Your v14r6 (too much scan influence)
+                              #   1.0: ROS default (heavy scan influence, slanted corners)
+                              #   1.5+: Maximum scan trust (extreme smoothing)
+                              #
+                              # For your case (excellent odometry rotation):
+                              #   Start: 0.25
+                              #   If corners still slanted: decrease to 0.20 or 0.15
+                              #   If corners too sharp: increase to 0.30-0.35
+
+    # ========================================================================
+    # SCAN MATCHER FINE-TUNING
+    # ========================================================================
+
+    # Fine search angle offset
+    fine_search_angle_offset: 0.00196
+                              # ~0.11° (0.2° in radians)
+                              # Matches RPLidar S3's 0.1125° angular resolution
+                              # Fine-tune rotation in final matching stage
+
+    # Coarse search angle offset
+    coarse_search_angle_offset: 0.174
+                              # ~10° (0.174 rad)
+                              # Initial coarse search range: ±10°
+                              # Default: 0.349 (±20°)
+                              # Narrower for good odometry, wider for poor
+
+    # Coarse angle resolution
+    coarse_angle_resolution: 0.0349
+                              # ~2° step size for coarse search
+                              # Scans every 2° within ±10° range
+
+    # Minimum penalties (floors for penalty multipliers)
+    minimum_angle_penalty: 1.0
+                              # Minimum value for angle penalty
+                              # Even with large deviation, penalty >= this
+                              # Higher = stricter (always some penalty)
+                              # Lower = more permissive
+                              # Default: 0.9
+                              # Range: 0.5-1.5
+
+    minimum_distance_penalty: 0.5
+                              # Minimum value for distance penalty
+                              # Default: 0.5
+                              # Range: 0.3-0.8
+
+    # Response expansion
+    use_response_expansion: true
+                              # Expand high-response areas for robustness
+                              # Usually keep true
+
+    # ========================================================================
+    # ADDITIONAL PARAMETERS (Less Common)
+    # ========================================================================
+
+    # Occupancy threshold (if using occupancy grid directly)
+    # occupancy_threshold: 0.65  # Cells > this are obstacles
+
+    # TF restamping (for simulation or bag playback)
+    # restamp_tf: false  # Set true if using /use_sim_time
+
+    # ========================================================================
+    # QoS OVERRIDES (For reliable scan reception)
+    # ========================================================================
+    # Ensure reliable delivery of high-rate LiDAR scans
+
+    qos_overrides:
+      /scan:
+        subscription:
+          reliability: reliable  # Don't drop scans
+          history: keep_last
+          depth: 50             # Buffer up to 50 scans (5s at 10Hz)
+          durability: volatile
+
+# ============================================================================
+# PARAMETER SUMMARY - Quick Reference
+# ============================================================================
+#
+# MOST CRITICAL (Affect corner sharpness):
+# - angle_variance_penalty: 0.25 (LOW = trust odometry = SHARP corners)
+# - distance_variance_penalty: 0.5 (balanced position correction)
+#
+# CRITICAL (Affect stability):
+# - link_match_minimum_response_fine: 0.25 (prevent trajectory freezing)
+# - minimum_travel_heading: 0.10 (smooth rotation updates)
+# - correlation_search_space_dimension: 1.0 (initial scan convergence)
+#
+# IMPORTANT (Affect quality):
+# - ceres_loss_function: HuberLoss (outlier rejection for clutter)
+# - minimum_time_interval: 0.1 (match S3's 10Hz)
+# - resolution: 0.025 (2.5cm for detail)
+#
+# LOOP CLOSURE (Long-term accuracy):
+# - loop_search_maximum_distance: 15.0 (match environment size)
+# - loop_match_minimum_response_fine: 0.45 (balanced for clutter)
+#
+# ============================================================================
+# TROUBLESHOOTING GUIDE
+# ============================================================================
+#
+# PROBLEM: Corners still slanted
+# → Decrease angle_variance_penalty: 0.20 or 0.15
+# → Decrease distance_variance_penalty: 0.4
+#
+# PROBLEM: Trajectory freezes during rotation
+# → Decrease link_match_minimum_response_fine: 0.20
+# → Increase correlation_search_space_dimension: 1.2
+# → Decrease minimum_travel_heading: 0.08
+#
+# PROBLEM: Initial scan mismatch
+# → Increase correlation_search_space_dimension: 1.2-1.5
+# → Decrease link_match_minimum_response_fine: 0.20
+#
+# PROBLEM: Loop closure fails
+# → Decrease loop_match_minimum_response_fine: 0.40
+# → Decrease loop_match_minimum_response_coarse: 0.30
+# → Increase loop_search_maximum_distance: 20.0
+#
+# PROBLEM: Map too noisy
+# → Increase link_match_minimum_response_fine: 0.28-0.30
+# → Decrease correlation_search_space_dimension: 0.8
+# → Increase angle_variance_penalty: 0.30-0.35 (slight trade-off with sharpness)
+#
+# PROBLEM: CPU usage too high
+# → Increase minimum_time_interval: 0.15-0.2
+# → Increase map_update_interval: 2.0
+# → Increase correlation_search_space_resolution: 0.015
+# → Reduce scan_buffer_size: 30
+#
+# ============================================================================
