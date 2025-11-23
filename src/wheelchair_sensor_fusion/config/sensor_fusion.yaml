@@ -1,0 +1,27 @@
+sensor_fusion:
+  ros__parameters:
+    # Input topics
+    lidar_clusters_topic: '/lidar/clusters'
+    yolo_detections_topic: '/yolo/detections'
+    camera_info_topic: '/camera/color/camera_info'
+    depth_image_topic: '/camera/aligned_depth_to_color/image_raw'
+
+    # Output topics
+    fused_obstacles_topic: '/fusion/obstacles'
+    visualization_topic: '/fusion/visualization'
+
+    # Fusion algorithm parameters
+    fusion_iou_threshold: 0.3           # IoU threshold for matching
+    max_association_distance: 0.5       # meters - max distance for association
+    adaptive_weighting: true            # Enable adaptive weight adjustment
+    distance_threshold: 2.0             # meters - distance for weight transition
+    lighting_adaptive: true             # Adapt to lighting conditions
+
+    # Frame IDs
+    lidar_frame: 'lidar'
+    camera_frame: 'camera_color_optical_frame'
+    base_frame: 'base_link'
+
+    # Synchronization
+    sync_queue_size: 10
+    sync_slop: 0.05                     # seconds - time tolerance for sync
