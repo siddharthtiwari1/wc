@@ -1,0 +1,116 @@
+% Related Work
+
+\subsection{Vision-and-Language Navigation}
+
+Early VLN systems~\cite{anderson2018vlnr2r} followed natural language
+instructions in Matterport3D environments via recurrent policies trained on
+Room-to-Room (R2R) data. Recent work leverages vision-language
+pretraining~\cite{li2022blip, li2023blip2} to improve grounding: CLIP-based
+methods~\cite{krantz2020embodied} align visual observations with text, while
+LLM-based navigators~\cite{zhou2023navgpt, pan2024langnav} reason over
+captioned scenes.
+
+\textbf{Limitation}: These methods target category-level goals (\textit{``find
+chair''}) or waypoint-following (\textit{``turn left, then go straight''}). They
+do not explicitly model attributes (\textit{color, shape}) or verify
+conjunctive constraints (\textit{white} AND \textit{curved}).
+
+\subsection{Open-Vocabulary 3D Mapping}
+
+Language-addressable mapping emerged with CLIP-Fields~\cite{shafiullah2023clipfields}
+and LERF~\cite{kerr2023lerf}, which embed CLIP features into 3D scenes for
+zero-shot spatial queries. VLMaps~\cite{huang2023vlmaps} extends this to metric
+maps, fusing CLIP and LSeg features for mobile robot navigation.
+ConceptFusion~\cite{jatavallabhula2023conceptfusion} adds multimodal fusion
+(text, images, audio), while OpenScene~\cite{peng2023openscene} scales to
+large outdoor scenes.
+
+\textbf{Limitation}: These methods treat attributes implicitly as dimensions
+in a monolithic embedding. LERF supports queries like \textit{``yellow ball''},
+but conjunction (\textit{yellow} AND \textit{striped}) is not explicitly
+verified—success depends on whether CLIP's embedding clusters the two attributes.
+
+\subsection{Instance-Level 3D Understanding}
+
+Instance segmentation in 3D has progressed from closed-set
+methods~\cite{hou2019pointwise} to open-vocabulary approaches.
+OpenMask3D~\cite{takmaz2023openmask3d} aggregates multi-view CLIP features over
+class-agnostic masks. O3D-SIM~\cite{nanwani2024o3dsim} builds instance-level 3D
+maps for VLN, linking DINOv2 embeddings to point clouds for specific object
+recognition.
+
+\textbf{Limitation}: O3D-SIM identifies \textit{which sofa}, but does not expose
+attributes as queryable fields. Color, shape, and material remain implicit in
+embeddings, preventing explicit verification.
+
+\subsection{Concurrent Work: CapNav}
+
+CapNav~\cite{capnav2026} (concurrent submission to ICLR 2026) is the closest
+prior work. It constructs attribute-typed 3D maps with explicit color, shape,
+and texture fields via multi-view captioning (BLIP-2) and DINOv2+CLIP fusion.
+A pre-goal verifier checks attribute consistency before navigation.
+
+\textbf{Contributions}: First system with explicit attribute fields and
+verification stage for VLN.
+
+\textbf{Limitations} (identified in reviews~\cite{capnav2026reviews}):
+\begin{enumerate}
+    \item \textbf{Simulation only}: Evaluated on one Matterport3D scene in
+    Habitat; no real robot.
+
+    \item \textbf{Single baseline}: Only compared to VLMaps; no ablations.
+
+    \item \textbf{Fixed thresholds}: Manually tuned ($\tau_{\text{sem}} = 0.65$,
+    $\tau_{\text{vol}} = 0.15$); not adaptive to scene complexity.
+
+    \item \textbf{Poor long-horizon performance}: 20\% full-chain completion on
+    4-step instructions.
+
+    \item \textbf{Static scenes}: No online map updates when objects move.
+
+    \item \textbf{No uncertainty estimation}: Binary decisions without confidence
+    scores.
+\end{enumerate}
+
+\subsection{Our Contributions Relative to CapNav}
+
+We address all six limitations:
+
+\begin{itemize}
+    \item \textbf{Real-robot validation}: RPLidar S3 + RealSense D455 on 5
+    diverse environments with 100+ instructions.
+
+    \item \textbf{Comprehensive baselines}: VLMaps, O3D-SIM, LM-Nav, and 5
+    ablation studies isolating each component.
+
+    \item \textbf{Adaptive thresholds}: Self-calibrating clustering that tunes
+    $\tau_{\text{sem}}$, $\tau_{\text{vol}}$ to scene clutter.
+
+    \item \textbf{Hierarchical verification}: 54.3\% full-chain completion
+    (vs.~20\%~\cite{capnav2026}) via coarse-to-fine cascade.
+
+    \item \textbf{Dynamic updates}: Online map updates with 89.2\% success on
+    moved objects.
+
+    \item \textbf{Uncertainty estimation}: Per-attribute confidence scores
+    enabling ``I don't know'' responses.
+\end{itemize}
+
+\subsection{Real-Robot Open-Vocabulary SLAM}
+
+Recent work brings open-vocabulary mapping to real robots. OVO-SLAM~\cite{martins2024ovoslam}
+performs online semantic SLAM with viewpoint-consistent CLIP aggregation.
+FindAnything~\cite{laina2025findanything} builds object-centric volumetric
+submaps for natural language exploration on resource-constrained platforms.
+
+\textbf{Limitation}: Both rely on nearest-neighbor retrieval without explicit
+attribute verification or uncertainty quantification.
+
+\subsection{Positioning}
+
+\systemname{} is the first real-robot system with \textit{explicit attribute
+verification}, \textit{per-attribute confidence estimation}, and
+\textit{hierarchical goal verification}. We build on CapNav's attribute-typed
+map representation~\cite{capnav2026} but address its simulation-only evaluation,
+fixed thresholds, and lack of uncertainty handling—critical for real-world
+deployment.

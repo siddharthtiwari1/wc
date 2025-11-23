@@ -1,0 +1,59 @@
+# Dense Crowd Navigation - Python Dependencies
+# Compatible with CUDA 13.0 and RTX 5050
+
+# Core ML Frameworks
+# Install PyTorch separately: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130
+# Install JAX separately: pip install "jax[cuda13_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+
+# Deep Learning
+numpy>=1.24.0,<2.0.0
+scipy>=1.11.0
+scikit-learn>=1.3.0
+tensorboard>=2.15.0
+wandb>=0.16.0
+
+# Diffusion Models
+diffusers>=0.25.0
+accelerate>=0.26.0
+
+# Configuration & Logging
+hydra-core>=1.3.2
+omegaconf>=2.3.0
+pyyaml>=6.0
+tqdm>=4.66.0
+rich>=13.7.0
+
+# Robotics & Geometry
+open3d>=0.18.0
+filterpy>=1.4.5
+transforms3d>=0.4.1
+
+# Social Force Model
+pysocialforce>=1.0.0
+
+# Data Processing
+h5py>=3.10.0
+matplotlib>=3.8.0
+seaborn>=0.13.0
+opencv-python>=4.8.0
+pillow>=10.0.0
+
+# ROS2 Python (should be installed via apt, but listed for reference)
+# rclpy
+# geometry-msgs
+# sensor-msgs
+# nav-msgs
+
+# Development Tools
+pytest>=7.4.0
+black>=23.12.0
+flake8>=7.0.0
+mypy>=1.8.0
+
+# Optimization
+optax>=0.2.0
+jaxopt>=0.8.0
+
+# Utils
+dataclasses-json>=0.6.3
+typer[all]>=0.9.0

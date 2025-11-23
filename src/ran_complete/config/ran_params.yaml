@@ -1,0 +1,218 @@
+# RAN Complete System Configuration
+# Production-ready parameters for wheelchair navigation
+
+/**:
+  ros__parameters:
+    use_sim_time: false
+
+# === PERCEPTION PARAMETERS ===
+ran_perception:
+  ros__parameters:
+    # Device
+    device: "cuda"  # or "cpu"
+
+    # Models
+    yolo_model: "yolov8x-worldv2.pt"
+    sam_model: "sam2_hiera_large.pt"
+    dinov2_model: "dinov2_vitl14"
+    clip_model: "ViT-L-14"
+
+    # Detection thresholds
+    conf_threshold: 0.25
+    nms_threshold: 0.45
+
+    # NOVEL: Visual quality thresholds
+    blur_threshold: 100.0  # Laplacian variance
+    min_object_size_ratio: 0.01  # 1% of frame
+    depth_completeness_threshold: 0.7  # 70% valid depth
+
+    # NOVEL: Attribute confidence thresholds
+    min_color_confidence: 0.5
+    min_shape_confidence: 0.4
+    min_material_confidence: 0.3
+
+# === MAPPING PARAMETERS ===
+ran_mapping:
+  ros__parameters:
+    # Voxel map
+    voxel_size: 0.05  # 5cm voxels
+    max_depth: 5.0  # meters
+    map_frame: "map"
+    camera_frame: "camera_color_optical_frame"
+
+    # NOVEL: Adaptive clustering
+    adaptive_tau_sem: true
+    tau_sem_base: 0.65
+    tau_sem_scaling: 0.1  # log scaling factor
+
+    # Geometric thresholds
+    tau_vol: 0.15  # Volumetric overlap
+    tau_iou: 0.20  # 3D box IoU
+    tau_cen: 0.15  # Centroid distance (m)
+    tau_grid: 1  # Grid adjacency (cells)
+
+    # Multi-view fusion
+    min_views_for_instance: 2
+    max_feature_age: 30.0  # seconds
+
+    # NOVEL: Confidence-weighted fusion
+    use_quality_weighting: true
+    min_quality_threshold: 0.3
+
+# === HIERARCHICAL VERIFICATION ===
+ran_verifier:
+  ros__parameters:
+    # Enable 4-level cascade (NOVEL!)
+    hierarchical: true
+
+    # Level thresholds
+    level_1_threshold: 0.5  # Category filtering
+    level_2_threshold: 0.6  # Salient attributes (color, shape)
+    level_3_threshold: 0.7  # Full attribute matching
+    level_4_distance: 1.5  # Re-verification distance (m)
+
+    # Attribute weights
+    weight_category: 0.3
+    weight_color: 0.25
+    weight_shape: 0.25
+    weight_material: 0.1
+    weight_location: 0.1
+
+    # NOVEL: Uncertainty handling
+    confidence_threshold: 0.6  # Min confidence to proceed
+    uncertainty_mode: "ask_user"  # or "skip", "retry"
+
+# === NAVIGATION ===
+ran_navigator:
+  ros__parameters:
+    # Nav2 integration
+    use_nav2: true
+    controller_frequency: 10.0  # Hz
+
+    # Goal tolerance
+    xy_goal_tolerance: 0.3  # meters
+    yaw_goal_tolerance: 0.2  # radians
+
+    # NOVEL: Dynamic map updates
+    enable_dynamic_updates: true
+    stale_instance_decay: 0.1  # Multiply confidence by this
+    max_verification_retries: 3
+
+# === SAFETY MONITOR (Wheelchair-Specific) ===
+ran_safety:
+  ros__parameters:
+    # Speed limits (conservative for human safety)
+    max_linear_velocity: 0.5  # m/s
+    max_angular_velocity: 0.3  # rad/s
+    max_acceleration: 0.2  # m/s²
+
+    # Collision avoidance
+    collision_distance: 0.8  # meters
+    emergency_stop_distance: 0.3  # meters
+    warning_distance: 1.5  # meters
+
+    # Safety checks
+    check_frequency: 20.0  # Hz
+    enable_emergency_stop: true
+    require_user_presence: true  # Check if user is seated
+
+# === NAV2 PARAMETERS (Wheelchair-Tuned) ===
+bt_navigator:
+  ros__parameters:
+    use_sim_time: false
+    global_frame: map
+    robot_base_frame: base_link
+    odom_topic: /odom
+    default_nav_to_pose_bt_xml: "navigate_to_pose_w_replanning.xml"
+    plugin_lib_names:
+      - nav2_compute_path_to_pose_action_bt_node
+      - nav2_follow_path_action_bt_node
+      - nav2_back_up_action_bt_node
+      - nav2_spin_action_bt_node
+      - nav2_wait_action_bt_node
+      - nav2_clear_costmap_service_bt_node
+      - nav2_is_stuck_condition_bt_node
+      - nav2_goal_reached_condition_bt_node
+
+controller_server:
+  ros__parameters:
+    use_sim_time: false
+    controller_frequency: 10.0
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.5
+    min_theta_velocity_threshold: 0.001
+
+    FollowPath:
+      plugin: "dwb_core::DWBLocalPlanner"
+      debug_trajectory_details: false
+      min_vel_x: 0.0
+      min_vel_y: 0.0
+      max_vel_x: 0.5  # Slow for safety
+      max_vel_y: 0.0
+      max_vel_theta: 0.3
+      min_speed_xy: 0.0
+      max_speed_xy: 0.5
+      min_speed_theta: 0.0
+      acc_lim_x: 0.2  # Gentle acceleration
+      acc_lim_y: 0.0
+      acc_lim_theta: 0.2
+      decel_lim_x: -0.2
+      decel_lim_y: 0.0
+      decel_lim_theta: -0.2
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      update_frequency: 5.0
+      publish_frequency: 2.0
+      global_frame: odom
+      robot_base_frame: base_link
+      use_sim_time: false
+      rolling_window: true
+      width: 5
+      height: 5
+      resolution: 0.05
+      robot_radius: 0.4  # Wheelchair footprint
+      plugins: ["obstacle_layer", "inflation_layer"]
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.8  # Wider for safety
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /scan
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: true
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      update_frequency: 1.0
+      publish_frequency: 1.0
+      global_frame: map
+      robot_base_frame: base_link
+      use_sim_time: false
+      robot_radius: 0.4
+      resolution: 0.05
+      track_unknown_space: true
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: true
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /scan
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: true
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.8

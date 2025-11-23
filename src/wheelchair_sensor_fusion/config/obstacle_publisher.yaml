@@ -1,0 +1,11 @@
+obstacle_publisher:
+  ros__parameters:
+    # Topics
+    obstacles_topic: '/fusion/obstacles'
+    costmap_topic: '/fusion/costmap'
+
+    # Costmap parameters
+    grid_resolution: 0.05              # meters per cell (5cm)
+    grid_width: 10.0                   # meters
+    grid_height: 10.0                  # meters
+    obstacle_inflation: 0.3            # meters - safety margin around obstacles

@@ -1,0 +1,21 @@
+lidar_processor:
+  ros__parameters:
+    # Topic configuration
+    scan_topic: '/scan'
+    clusters_topic: '/lidar/clusters'
+    visualization_topic: '/lidar/clusters_viz'
+
+    # Range filtering
+    min_range: 0.15   # meters
+    max_range: 6.0    # meters (RPLidar S3 range)
+
+    # DBSCAN clustering parameters
+    dbscan_eps: 0.15           # meters - maximum distance between points in a cluster
+    dbscan_min_samples: 3      # minimum points to form a cluster
+
+    # Cluster filtering
+    min_cluster_size: 3        # minimum points per cluster
+    max_cluster_size: 100      # maximum points per cluster
+
+    # Publishing rate
+    publish_rate: 20.0         # Hz

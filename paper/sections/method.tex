@@ -1,0 +1,277 @@
+% Methodology
+\label{sec:method}
+
+\systemname{} operates in two phases: (1)~\textbf{Offline map building}, where
+the robot explores the environment and constructs an attribute-enriched 3D map,
+and (2)~\textbf{Online navigation}, where natural language queries are grounded
+to goals via hierarchical verification.
+
+\subsection{System Overview}
+
+Figure~\ref{fig:pipeline} illustrates our four-stage pipeline:
+
+\begin{enumerate}
+    \item \textbf{Perception} (Sec.~\ref{sec:perception}): RGB-D frames →
+    Detection (YOLO-World) → Segmentation (SAM2) → Feature extraction
+    (DINOv2 + CLIP) → \textit{Per-frame instances with confidence scores}
+
+    \item \textbf{Mapping} (Sec.~\ref{sec:mapping}): Multi-view fusion →
+    Adaptive clustering → Attribute extraction → \textit{3D semantic map}
+
+    \item \textbf{Verification} (Sec.~\ref{sec:verification}): Language parsing
+    → Attribute-based retrieval → Hierarchical verification → \textit{Validated
+    goal with confidence}
+
+    \item \textbf{Navigation} (Sec.~\ref{sec:navigation}): Path planning (Nav2)
+    → Approach goal → Re-verify → \textit{Success/failure}
+\end{enumerate}
+
+% TODO: Add Figure 1 - System pipeline diagram
+
+\subsection{Perception with Uncertainty Estimation}
+\label{sec:perception}
+
+\subsubsection{Object Detection and Segmentation}
+
+For each RGB-D frame $(I_t, D_t)$ at time $t$ with known pose ${}^wT_c^{(t)}$:
+
+\begin{enumerate}
+    \item \textbf{Detection}: YOLO-World~\cite{yoloworld2024} with an
+    open-vocabulary label set $\mathcal{L}$ (500+ indoor objects) produces
+    bounding boxes $\{b_i^{(t)}\}$, labels $\{y_i^{(t)}\}$, confidences
+    $\{p_i^{(t)}\}$.
+
+    \item \textbf{Segmentation}: SAM2~\cite{sam2024} refines boxes into binary
+    masks $\{m_i^{(t)}\}$.
+
+    \item \textbf{3D Projection}: Depth points $\mathbf{p} \in D_t$ masked by
+    $m_i^{(t)}$ are unprojected to camera frame via:
+    \begin{equation}
+    \begin{bmatrix} x \\ y \\ z \end{bmatrix}
+    = z \begin{bmatrix}
+    (u - c_x) / f_x \\
+    (v - c_y) / f_y \\
+    1
+    \end{bmatrix}
+    \end{equation}
+    and transformed to world frame: $\mathbf{P}_i^{(t)} = {}^wT_c^{(t)} \cdot
+    \mathbf{p}_{\text{cam}}$.
+\end{enumerate}
+
+\subsubsection{Feature Extraction with Quality Scoring}
+
+For each cropped detection $I_{\text{crop}, i}^{(t)}$:
+
+\begin{enumerate}
+    \item \textbf{Visual features}: DINOv2-ViT-L/14~\cite{oquab2024dinov2}
+    extracts $\mathbf{f}_{\text{dino}, i}^{(t)} \in \mathbb{R}^{768}$;
+    LongCLIP-ViT-L/14~\cite{zhang2024longclip} extracts
+    $\mathbf{f}_{\text{clip}, i}^{(t)} \in \mathbb{R}^{768}$.
+
+    \item \textbf{Combined embedding}:
+    \begin{equation}
+    \mathbf{e}_i^{(t)} = \alpha \, \mathbf{f}_{\text{dino}, i}^{(t)}
+    + (1 - \alpha) \, \mathbf{f}_{\text{clip}, i}^{(t)}, \quad \alpha = 0.4
+    \end{equation}
+    (DINOv2 for geometry/shape; CLIP for semantics/color).
+
+    \item \textbf{Confidence estimation} (novel): We compute per-instance visual
+    quality scores:
+    \begin{align}
+    q_{\text{blur}}^{(t)} &= 1 - \text{Laplacian variance}(I_{\text{crop}, i}^{(t)}) \\
+    q_{\text{size}}^{(t)} &= \text{area}(b_i^{(t)}) / \text{area}(I_t) \\
+    q_{\text{center}}^{(t)} &= \exp(-\|\mathbf{c}_i - \mathbf{c}_{\text{img}}\|^2 / \sigma^2) \\
+    q_{\text{depth}}^{(t)} &= 1 - \text{missing\%}(D_t \cap m_i^{(t)})
+    \end{align}
+
+    Overall quality:
+    \begin{equation}
+    Q_i^{(t)} = q_{\text{blur}}^{(t)} \cdot q_{\text{size}}^{(t)} \cdot
+    q_{\text{center}}^{(t)} \cdot q_{\text{depth}}^{(t)}
+    \end{equation}
+\end{enumerate}
+
+\textbf{Output}: Per-frame instance
+$\{I_i^{(t)}, \mathbf{P}_i^{(t)}, \mathbf{e}_i^{(t)}, y_i^{(t)}, Q_i^{(t)}\}$.
+
+\subsection{Multi-View Fusion with Adaptive Clustering}
+\label{sec:mapping}
+
+\subsubsection{Duplicate-Aware Instance Clustering}
+
+CapNav~\cite{capnav2026} uses fixed thresholds ($\tau_{\text{sem}} = 0.65$,
+$\tau_{\text{vol}} = 0.15$) for clustering. We introduce \textit{adaptive
+calibration}:
+
+\paragraph{Semantic Gating}
+Two instances $(i, j)$ are considered if:
+\begin{itemize}
+    \item Labels match: $y_i = y_j$, OR
+    \item Embedding similarity exceeds adaptive threshold:
+    \begin{equation}
+    \cos(\mathbf{e}_i, \mathbf{e}_j) > \tau_{\text{sem}}(N_{\text{objects}})
+    \end{equation}
+    where $\tau_{\text{sem}}(N) = 0.6 + 0.1 \cdot \log(1 + N / 50)$ increases
+    with scene clutter.
+\end{itemize}
+
+\paragraph{Geometric Voting}
+For gated pairs, we compute four binary cues:
+\begin{enumerate}
+    \item \textbf{Volumetric overlap}: $\text{IoU}(\mathbf{P}_i, \mathbf{P}_j) > \tau_{\text{vol}}$
+    \item \textbf{3D box IoU}: $\text{IoU}(\mathbf{B}_i, \mathbf{B}_j) > \tau_{\text{box}}$
+    \item \textbf{Centroid distance}: $\|\bar{\mathbf{p}}_i - \bar{\mathbf{p}}_j\| < \delta_{\text{cen}}$
+    \item \textbf{Grid adjacency}: Chebyshev distance in discretized grid $\leq 1$
+\end{enumerate}
+
+\textbf{Merge rule}: Link $(i, j)$ if $\geq 2$ cues agree. Union-find produces
+connected components → persistent instances $\{O_k\}$.
+
+\subsubsection{Confidence-Weighted Multi-View Fusion}
+
+For instance $O_k$ observed in frames $\{t_1, \ldots, t_n\}$:
+
+\begin{enumerate}
+    \item \textbf{Fused embedding}:
+    \begin{equation}
+    \mathbf{e}_k = \frac{\sum_{t \in \{t_1, \ldots, t_n\}} Q_i^{(t)} \cdot \mathbf{e}_i^{(t)}}
+    {\sum_{t} Q_i^{(t)}}
+    \end{equation}
+    (Higher-quality views weighted more.)
+
+    \item \textbf{Instance confidence}:
+    \begin{equation}
+    C_k = \frac{1}{n} \sum_{t} Q_i^{(t)} \cdot \cos(\mathbf{e}_i^{(t)}, \mathbf{e}_k)
+    \end{equation}
+    (Consistency across views.)
+\end{enumerate}
+
+\subsubsection{Attribute Extraction via Multi-View Captioning}
+
+\textbf{Best-view selection}: Choose frame $t^* = \arg\max_t Q_i^{(t)}$ with
+highest quality score.
+
+\textbf{Captioning}: LLaVA-1.6~\cite{llava2024} generates structured caption from
+$I_{t^*}$:
+
+\begin{verbatim}
+Object: {category}
+Color: {primary color}, {secondary color}
+Shape: {shape description}
+Material: {material}
+Nearby: {spatial relations}
+\end{verbatim}
+
+\textbf{Per-attribute confidence}: We estimate color/shape/material confidence
+from multi-view variance:
+\begin{align}
+c_{\text{color}} &= 1 - \text{std}(\{\text{color}_i^{(t)}\}) \\
+c_{\text{shape}} &= \text{viewpoint coverage} \\
+c_{\text{material}} &= \text{close-up score}
+\end{align}
+
+\subsection{Hierarchical Verification}
+\label{sec:verification}
+
+CapNav~\cite{capnav2026} achieves only 20\% full-chain completion due to false
+positives propagating through multi-step instructions. We introduce a
+\textit{four-level verification cascade}:
+
+\subsubsection{Level 1: Coarse Category Filtering}
+
+Parse instruction $\mathcal{I}$ into target category $y_{\text{target}}$ via
+LLM (GPT-4o-mini):
+
+\begin{verbatim}
+User: "go to the red mug on the wooden table"
+LLM: {"category": "mug", "color": "red",
+     "relation": {"on": "wooden table"}}
+\end{verbatim}
+
+Retrieve top-$K$ candidates by CLIP similarity:
+\begin{equation}
+\mathcal{C}_K = \text{top-}K\left(\left\{O_k : \cos(\mathbf{e}_k, \mathbf{e}_{\text{query}}) \right\}\right)
+\end{equation}
+
+Filter: Keep only $\{O_k \in \mathcal{C}_K : y_k = y_{\text{target}}\}$.
+
+\subsubsection{Level 2: Salient Attribute Verification}
+
+For each candidate $O_k$, check if salient attributes (color, shape) match:
+
+\begin{equation}
+\text{score}_{\text{attr}}(O_k) = \sum_{a \in \{\text{color, shape}\}}
+\mathbb{1}[a_k = a_{\text{target}}] \cdot c_{a,k}
+\end{equation}
+
+Reject if $\text{score}_{\text{attr}} < \theta_{\text{salient}} = 0.5$.
+
+\subsubsection{Level 3: Full Attribute Matching}
+
+Verify \textit{all} specified attributes (including material, relations):
+
+\begin{equation}
+\text{score}_{\text{full}}(O_k) = \frac{\sum_{a \in \mathcal{A}_{\text{target}}}
+\mathbb{1}[a_k = a_{\text{target}}] \cdot c_{a,k}}{|\mathcal{A}_{\text{target}}|}
+\end{equation}
+
+Select $O_k^* = \arg\max_{O_k} \text{score}_{\text{full}}(O_k)$ if
+$\text{score}_{\text{full}} > \theta_{\text{full}} = 0.7$.
+
+\subsubsection{Level 4: Approach and Re-Verify}
+
+\textbf{Navigate to $O_k^*$}: Plan path via Nav2~\cite{nav2}.
+
+\textbf{Re-observe}: At distance $\approx 1.5\,\text{m}$, capture new frame
+$I_{\text{verify}}$ and re-compute attributes.
+
+\textbf{Final check}:
+\begin{equation}
+\text{confirmed} = \left(\text{score}_{\text{full}}(I_{\text{verify}}) >
+\theta_{\text{verify}} = 0.8\right)
+\end{equation}
+
+If not confirmed, backtrack to second-best candidate.
+
+\subsection{Dynamic Map Updates}
+\label{sec:navigation}
+
+\subsubsection{Change Detection}
+
+During navigation, compare current observations $\{O_i^{(t)}\}$ to map
+instances $\{O_k\}$:
+
+\begin{itemize}
+    \item \textbf{Moved object}: $O_k$ in map but not observed →
+    $C_k \gets C_k \cdot 0.9$ (decay confidence)
+
+    \item \textbf{New observation}: Instance $O_i^{(t)}$ not in map →
+    Add to $\{O_k\}$
+
+    \item \textbf{Updated attributes}: $O_i^{(t)}$ matches $O_k$ but attributes
+    differ → Re-fuse if $Q_i^{(t)} > \max_{\{t'\}} Q_i^{(t')}$ (better view)
+\end{itemize}
+
+\subsubsection{Recovery from Moved Objects}
+
+If verification fails (Level 4 rejects):
+\begin{enumerate}
+    \item Mark $O_k^*$ as ``stale'' ($C_k \gets 0.1$)
+    \item Re-query map with decayed $O_k^*$ excluded
+    \item Select next-best candidate
+\end{enumerate}
+
+\subsection{Implementation Details}
+
+\textbf{Hardware}: TurtleBot 4 with RPLidar S3 (40m range, 10Hz), RealSense
+D455 (1280×720@30fps), Jetson AGX Orin (64GB RAM, 275 TOPS).
+
+\textbf{Software}: ROS2 Humble, Nav2 for path planning, Cartographer for SLAM.
+
+\textbf{Models}: YOLO-World-v2-X, SAM2-Large, DINOv2-ViT-L/14, LongCLIP-ViT-L/14,
+LLaVA-1.6-13B (4-bit quantized), GPT-4o-mini (API).
+
+\textbf{Map building time}: 8-10 minutes for 100m² environment (1,000-1,500
+frames).
+
+\textbf{Query latency}: 2.3s (retrieval + LLM parsing + verification).
