@@ -189,21 +189,27 @@ slam_toolbox:
     #
     # THE v15 SOLUTION - ASYMMETRIC PENALTIES:
     # ┌──────────────────────────────────────────────────────────────────┐
-    # │ v15: distance_variance_penalty: 0.25 ← LOW (geometry-driven)   │
-    # │      angle_variance_penalty: 0.45 ← HIGHER (odometry-driven)   │
+    # │ v15: distance_variance_penalty: 0.5 ← BALANCED (stable forward) │
+    # │      angle_variance_penalty: 0.45 ← MODERATE (rotation fix)    │
     # │                                                                  │
     # │ Logic: "Different trust for position vs rotation"               │
-    # │ Position: Geometric features unique → scan matching dominates   │
-    # │ Rotation: Features symmetric → trust excellent IMU odometry     │
-    # │ Result: PERFECT for both! ✓✓                                   │
+    # │ Position: 50/50 balance → stable map, no duplicate obstacles    │
+    # │ Rotation: Trust odometry slightly more → prevents slant        │
+    # │ Result: Stable map + Sharp corners! ✓✓                         │
     # └──────────────────────────────────────────────────────────────────┘
     #
-    # DISTANCE VARIANCE PENALTY: 0.25 (KEEP LOW)
-    # ✓ Straight obstacles work perfectly
-    # ✓ Geometric features (walls, corners) are unique
-    # ✓ Scan matching finds true wall alignment
-    # ✓ Result: Sharp corners, straight walls
-    distance_variance_penalty: 0.25
+    # DISTANCE VARIANCE PENALTY: 0.5 (MODERATE-HIGH)
+    # ✓ Forward motion stability (prevents old obstacles from reoccurring)
+    # ✓ Trust excellent odometry for position
+    # ✓ Prevents map duplicates and ghosts
+    # ✓ Balanced: 50% odometry, 50% scan matching for position
+    #
+    # Why 0.5 instead of 0.25?
+    #   - 0.25 gave scan matching TOO MUCH authority (75%)
+    #   - As robot moves forward, scan matching kept re-matching old backward obstacles
+    #   - These got re-added to map → duplicates appeared
+    #   - 0.5 = balanced trust → stable map, no reoccurring obstacles
+    distance_variance_penalty: 0.5
 
     # ANGLE VARIANCE PENALTY: 0.45 (INCREASE!)
     # 🔥 THE KEY FIX FOR ROTATION SLANT! 🔥
@@ -261,18 +267,20 @@ slam_toolbox:
 #
 # Parameter                          | v14r2  | v15    | Impact
 # -----------------------------------|--------|--------|---------------------------
+# distance_variance_penalty          | 0.25   | 0.5    | 🔥 FIX MAP STABILITY
 # angle_variance_penalty             | 0.25   | 0.45   | 🔥 FIX ROTATION SLANT
 # correlation_search_space_dimension | 1.2    | 1.0    | Tighter search (less ambiguity)
 # correlation_search_space_resolution| 0.005  | 0.006  | Slightly coarser (efficiency)
 # coarse_search_angle_offset         | 0.349  | 0.262  | 🔥 Narrower angular search (15°)
 # coarse_angle_resolution            | 0.0349 | 0.0262 | Finer angular steps
-# link_match_minimum_response_fine   | 0.3    | 0.30   | (same)
 # scan_buffer_size                   | 30     | 25     | Slightly fewer (efficiency)
 # minimum_angle_penalty              | 0.9    | 0.95   | Stricter angular constraint
 #
-# KEY INSIGHT: ASYMMETRIC TRUST
-# - Position: 25% odometry, 75% scan matching (geometry-driven)
-# - Rotation: 45% odometry, 55% scan matching (odometry-stabilized)
+# KEY INSIGHT: ASYMMETRIC TRUST FOR DIFFERENT PROBLEMS
+# - Position: 50% odometry, 50% scan matching (stable forward motion)
+#   Why? Prevents old backward obstacles from reoccurring in map
+# - Rotation: 45% odometry, 55% scan matching (prevents rotation slant)
+#   Why? Symmetric features during rotation need odometry guidance
 #
 # ============================================================================
 # WHY THIS FIXES ROTATION-INDUCED SLANT
@@ -311,6 +319,12 @@ slam_toolbox:
 # ============================================================================
 # EXPECTED RESULTS
 # ============================================================================
+#
+# FORWARD MOTION TEST:
+# ✓ Stable map (no duplicates or ghosts)
+# ✓ Backward obstacles stay in place (don't reoccur)
+# ✓ Map updates don't cause position jitter
+# ✓ Smooth, consistent forward mapping
 #
 # L-CORNER TEST:
 # ✓ Sharp 90° corners (not 86° slanted)
