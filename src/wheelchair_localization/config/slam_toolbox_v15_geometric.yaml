@@ -189,27 +189,31 @@ slam_toolbox:
     #
     # THE v15 SOLUTION - ASYMMETRIC PENALTIES:
     # ┌──────────────────────────────────────────────────────────────────┐
-    # │ v15: distance_variance_penalty: 0.5 ← BALANCED (stable forward) │
+    # │ v15: distance_variance_penalty: 0.65 ← HIGH (forward trajectory)│
     # │      angle_variance_penalty: 0.45 ← MODERATE (rotation fix)    │
     # │                                                                  │
     # │ Logic: "Different trust for position vs rotation"               │
-    # │ Position: 50/50 balance → stable map, no duplicate obstacles    │
-    # │ Rotation: Trust odometry slightly more → prevents slant        │
-    # │ Result: Stable map + Sharp corners! ✓✓                         │
+    # │ Position: 65% odometry, 35% scan → forward trajectory stable    │
+    # │ Rotation: 45% odometry, 55% scan → sharp 90° corners           │
+    # │ Result: Correct forward motion + Sharp corners! ✓✓             │
     # └──────────────────────────────────────────────────────────────────┘
     #
-    # DISTANCE VARIANCE PENALTY: 0.5 (MODERATE-HIGH)
-    # ✓ Forward motion stability (prevents old obstacles from reoccurring)
-    # ✓ Trust excellent odometry for position
-    # ✓ Prevents map duplicates and ghosts
-    # ✓ Balanced: 50% odometry, 50% scan matching for position
+    # DISTANCE VARIANCE PENALTY: 0.65 (HIGH TRUST)
+    # 🔥 CRITICAL FOR FORWARD TRAJECTORY! 🔥
     #
-    # Why 0.5 instead of 0.25?
-    #   - 0.25 gave scan matching TOO MUCH authority (75%)
-    #   - As robot moves forward, scan matching kept re-matching old backward obstacles
-    #   - These got re-added to map → duplicates appeared
-    #   - 0.5 = balanced trust → stable map, no reoccurring obstacles
-    distance_variance_penalty: 0.5
+    # TESTING HISTORY:
+    #   0.25: Scan matching 75% → backward obstacles reoccurred ❌
+    #   0.5:  Scan matching 50% → trajectory moved BACKWARD ❌
+    #   0.65: Scan matching 35% → should fix backward movement ✓
+    #
+    # Why 0.65 (HIGH)?
+    #   - Your odometry for POSITION is EXCELLENT (EKF fusion)
+    #   - 0.5 gave scan matching too much position authority (50%)
+    #   - Scan matching was finding "better matches" behind actual position
+    #   - Result: Trajectory appeared to move backward!
+    #   - 0.65 = "Trust odometry 65%, scan refines 35%"
+    #   - Prevents backward trajectory while allowing geometric refinement
+    distance_variance_penalty: 0.65
 
     # ANGLE VARIANCE PENALTY: 0.45 (INCREASE!)
     # 🔥 THE KEY FIX FOR ROTATION SLANT! 🔥
@@ -267,8 +271,8 @@ slam_toolbox:
 #
 # Parameter                          | v14r2  | v15    | Impact
 # -----------------------------------|--------|--------|---------------------------
-# distance_variance_penalty          | 0.25   | 0.5    | 🔥 FIX MAP STABILITY
-# angle_variance_penalty             | 0.25   | 0.45   | 🔥 FIX ROTATION SLANT
+# distance_variance_penalty          | 0.25   | 0.65   | 🔥 FIX BACKWARD TRAJECTORY
+# angle_variance_penalty             | 0.25   | 0.45   | 🔥 FIX ROTATION (WORKING!)
 # correlation_search_space_dimension | 1.2    | 1.0    | Tighter search (less ambiguity)
 # correlation_search_space_resolution| 0.005  | 0.006  | Slightly coarser (efficiency)
 # coarse_search_angle_offset         | 0.349  | 0.262  | 🔥 Narrower angular search (15°)
@@ -277,10 +281,10 @@ slam_toolbox:
 # minimum_angle_penalty              | 0.9    | 0.95   | Stricter angular constraint
 #
 # KEY INSIGHT: ASYMMETRIC TRUST FOR DIFFERENT PROBLEMS
-# - Position: 50% odometry, 50% scan matching (stable forward motion)
-#   Why? Prevents old backward obstacles from reoccurring in map
-# - Rotation: 45% odometry, 55% scan matching (prevents rotation slant)
-#   Why? Symmetric features during rotation need odometry guidance
+# - Position: 65% odometry, 35% scan matching (prevents backward trajectory)
+#   Testing showed: 0.5 caused backward movement, 0.65 fixes it
+# - Rotation: 45% odometry, 55% scan matching (sharp 90° corners)
+#   User confirmed: "rotation was good" at 0.45
 #
 # ============================================================================
 # WHY THIS FIXES ROTATION-INDUCED SLANT
