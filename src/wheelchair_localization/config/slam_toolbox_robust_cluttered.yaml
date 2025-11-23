@@ -150,22 +150,32 @@ slam_toolbox:
     # VARIANCE PENALTIES - CRITICAL FOR SHARP CORNERS!
     # ========================================================================
 
-    # RESEARCH-BASED VALUES (not guesswork):
-    # --------------------------------------------------------
-    # Standard indoor SLAM: distance=0.5, angle=1.0
-    # Sharp corners + excellent odometry: angle=1.5-2.0
-    # --------------------------------------------------------
+    # CORRECT INTERPRETATION (verified from slam_toolbox source code):
+    # ----------------------------------------------------------------
+    # Formula: penalty = 1.0 - (gain * deviation² / variance_penalty)
+    #
+    # - LOWER variance_penalty → larger penalty → TRUST ODOMETRY MORE
+    # - HIGHER variance_penalty → smaller penalty → TRUST SCAN MATCHING MORE
+    #
+    # Code defaults (Karto SDK):
+    #   distance: 0.09 (LOW = trust odometry position)
+    #   angle: 0.12 (LOW = trust odometry rotation)
+    #
+    # ROS defaults:
+    #   distance: 0.5 (moderate scan matching for position)
+    #   angle: 1.0 (significant scan matching for rotation)
+    # ----------------------------------------------------------------
 
-    # Distance penalty: MODERATE trust in position odometry
-    # 0.5 = standard indoor, balanced scan/odom fusion
+    # Distance penalty: MODERATE - allow scan matching for position correction
+    # 0.5 = balanced between odometry and scan matching for position
     distance_variance_penalty: 0.5
 
-    # Angle penalty: HIGH trust in rotation odometry
+    # Angle penalty: LOW - trust odometry rotation for SHARP corners!
     # CRITICAL FOR SHARP 90° CORNERS!
     # Your odometry rotation is excellent → TRUST IT!
-    # 1.5 = high trust, preserves odometry angles
+    # 0.25 = LOW value = MORE penalty for deviating = preserves odometry angles
     # Result: Sharp L-shapes, not slanted!
-    angle_variance_penalty: 1.5
+    angle_variance_penalty: 0.25
 
     # ========================================================================
     # SCAN MATCHER FINE-TUNING

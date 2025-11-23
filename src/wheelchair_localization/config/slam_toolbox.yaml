@@ -94,12 +94,22 @@ slam_toolbox:
     # ========================================================================
     # VARIANCE PENALTIES - CRITICAL FOR SHARP CORNERS!
     # ========================================================================
-    # Research-based values (not guesswork):
-    # - Standard indoor: distance=0.5, angle=1.0
-    # - Sharp corners: angle >> distance (2-3x higher)
+    # CORRECT INTERPRETATION (verified from source code):
+    # - LOWER value = MORE penalty for deviating from odometry = TRUST ODOMETRY
+    # - HIGHER value = LESS penalty for deviating from odometry = TRUST SCAN MATCHING
+    #
+    # Code formula: penalty = 1.0 - (gain * deviation² / variance_penalty)
+    # - variance_penalty in denominator: larger value → smaller fraction → less penalty
+    #
+    # Code defaults: distance=0.09, angle=0.12 (both LOW = trust odometry)
+    # ROS defaults: distance=0.5, angle=1.0 (moderate scan matching trust)
+    #
+    # For SHARP 90° corners with excellent odometry rotation:
+    # - Need LOW angle_variance_penalty to preserve odometry's sharp turns
+    # - Can use moderate distance_variance_penalty for scan-based position correction
     # ========================================================================
-    distance_variance_penalty: 0.5      # Standard - moderate position trust
-    angle_variance_penalty: 1.5         # CHANGED: HIGH (was 1.0) - SHARP corners!
+    distance_variance_penalty: 0.5      # Moderate - allow scan matching for position
+    angle_variance_penalty: 0.25        # LOW - trust odometry rotation for SHARP corners!
 
     # ========================================================================
     # SCAN MATCHER FINE-TUNING
