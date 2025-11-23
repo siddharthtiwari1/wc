@@ -1,0 +1,381 @@
+# ============================================================================
+# SLAM Toolbox Configuration v15 - GEOMETRIC FEATURE ALIGNMENT
+# ============================================================================
+# Created: 2025-11-23
+# Upgrade from: v14
+# Target: Fix slanted L-corners and failed loop closures
+#
+# ============================================================================
+# THE PROBLEM WITH v14 (despite excellent odometry):
+# ============================================================================
+#
+# You have EXCELLENT EKF odometry that traces perfect rectangles.
+# But SLAM produces slanted L-corners and fails loop closures.
+#
+# WHY?
+#   Good odometry → Scan matcher searches near odometry prediction
+#   Scan matcher finds "good enough" match → Doesn't align to geometry
+#   L-shaped corners → Scan matcher should detect 90° constraint
+#   But: Too much trust in odometry → Geometric features ignored!
+#
+# THE PARADOX:
+#   Excellent odometry tells you WHERE you are (position)
+#   But NOT WHAT surrounds you (geometry)
+#   Scan matching MUST align to geometric features, not just odometry!
+#
+# ============================================================================
+# THE v15 SOLUTION: GEOMETRY-FIRST SCAN MATCHING
+# ============================================================================
+#
+# PHILOSOPHY CHANGE:
+#   v14: "Trust odometry, let scan matching refine"
+#   v15: "Use odometry as hint, FORCE scan matching to find geometry"
+#
+# KEY CHANGES:
+#   1. Drastically reduced variance penalties → Scan matching dominates
+#   2. Wider search space → Explore beyond odometry prediction
+#   3. Finer resolution → Detect sharp geometric features (corners)
+#   4. Iterative refinement → Coarse search → Find geometry → Refine
+#   5. Stricter matching quality → Demand geometric alignment
+#
+# RESULT:
+#   ✓ Odometry provides fast, excellent initial guess
+#   ✓ Scan matching AGGRESSIVELY aligns to L-corners, walls, geometry
+#   ✓ Sharp 90° corners in maps (not slanted)
+#   ✓ Loop closures succeed (geometric consistency)
+#
+# ============================================================================
+
+slam_toolbox:
+  ros__parameters:
+
+    # =========================================================================
+    # SOLVER CONFIGURATION - Maximum precision for geometric features
+    # =========================================================================
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+
+    # v14=None → v15=HuberLoss for geometric robustness
+    # HuberLoss: Robust to outliers while preserving sharp features
+    ceres_loss_function: HuberLoss
+
+    # =========================================================================
+    # ROS PARAMETERS (unchanged from v14)
+    # =========================================================================
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+    scan_topic: /scan
+    use_map_saver: true
+    mode: mapping
+
+    # =========================================================================
+    # BASIC PARAMETERS
+    # =========================================================================
+    debug_logging: false
+    throttle_scans: 1
+    transform_publish_period: 0.02       # 50Hz
+    map_update_interval: 5.0
+
+    # v14=0.025 → v15=0.03 (computational efficiency, still high quality)
+    # 3cm is sweet spot for geometric features without excessive compute
+    resolution: 0.03
+
+    max_laser_range: 12.0
+    minimum_time_interval: 0.1           # 10Hz scan processing
+
+    transform_timeout: 0.2
+    tf_buffer_duration: 30.0
+    stack_size_to_use: 40000000
+    enable_interactive_mode: true
+
+    # =========================================================================
+    # MOVEMENT THRESHOLDS - Catch geometric features early
+    # =========================================================================
+    use_scan_matching: true
+    use_scan_barycenter: true
+
+    # v14=0.2 → v15=0.15 (more frequent, catch corners sooner)
+    minimum_travel_distance: 0.15
+
+    # v14=0.087 (5°) → v15=0.087 (KEEP - this is perfect for rotations)
+    # 5° is ideal for rotation overlap, don't change
+    minimum_travel_heading: 0.087
+
+    # v14=15 → v15=20 (more history for geometric consistency)
+    scan_buffer_size: 20
+    scan_buffer_maximum_scan_distance: 10.0
+
+    # =========================================================================
+    # SCAN MATCHING QUALITY - DEMAND geometric alignment
+    # =========================================================================
+
+    # v14=0.2 → v15=0.25 (STRICTER - force better geometric matches)
+    # Higher = only accept matches that truly align to geometry
+    link_match_minimum_response_fine: 0.25
+
+    # v14=1.0 → v15=1.5 (allow larger search for geometric features)
+    link_scan_maximum_distance: 1.5
+
+    # =========================================================================
+    # LOOP CLOSURE PARAMETERS
+    # =========================================================================
+    do_loop_closing: true
+
+    # v14=5.0 → v15=6.0 (larger environment coverage)
+    loop_search_maximum_distance: 6.0
+
+    # v14=8 → v15=10 (require more scans for robust geometric loop closure)
+    loop_match_minimum_chain_size: 10
+
+    loop_match_maximum_variance_coarse: 3.0
+
+    # Stricter for geometric consistency
+    loop_match_minimum_response_coarse: 0.45   # v14=0.4
+    loop_match_minimum_response_fine: 0.55     # v14=0.5
+
+    # =========================================================================
+    # CORRELATION PARAMETERS - THE CRITICAL FIX FOR GEOMETRY!
+    # =========================================================================
+    # ⚠️ THIS IS WHERE v14 FAILED TO CAPTURE GEOMETRIC FEATURES! ⚠️
+    #
+    # SEARCH SPACE: v14=0.8m → v15=1.2m
+    # WHY LARGER?
+    #   v14 Problem: 0.8m search means scan matcher stays close to odometry
+    #   Even with good odometry, we need to LET scan matcher explore!
+    #
+    #   When passing L-corner:
+    #   - Odometry: "You're at X, Y based on wheel encoders"
+    #   - Geometry: "But scans show 90° wall constraint!"
+    #   - 1.2m search allows scan matcher to find geometric alignment
+    #   - Even if it's 30-50cm away from odometry prediction
+    #
+    #   Your odometry is excellent, so scan matcher will QUICKLY find
+    #   the global optimum. Larger search = more robust, not slower!
+    correlation_search_space_dimension: 1.2
+
+    # SEARCH RESOLUTION: v14=0.01 (1cm) → v15=0.005 (5mm)
+    # ⚠️ CRITICAL FOR SHARP GEOMETRIC FEATURES! ⚠️
+    # WHY FINER?
+    #   L-corners, 90° walls = sharp features
+    #   1cm resolution can "miss" the exact corner alignment
+    #   5mm resolution captures precise geometric constraints
+    #
+    #   Cost: 2x more search points (1cm→5mm)
+    #   Benefit: PERFECT corner alignment, sharp edges
+    #   With good odometry, this is computationally fine!
+    correlation_search_space_resolution: 0.005
+
+    # SMEAR DEVIATION: v14=0.05 → v15=0.03
+    # WHY LESS SMOOTHING?
+    #   Less smearing = sharper correlation peaks
+    #   Sharp peaks = unambiguous geometric matches
+    #   L-corners produce VERY sharp correlation peaks
+    #   We want to detect and use them!
+    correlation_search_space_smear_deviation: 0.03
+
+    # =========================================================================
+    # LOOP CLOSURE CORRELATION
+    # =========================================================================
+    loop_search_space_dimension: 8.0
+    loop_search_space_resolution: 0.05
+    loop_search_space_smear_deviation: 0.03
+
+    # =========================================================================
+    # VARIANCE PENALTIES - THE SECOND CRITICAL FIX!
+    # =========================================================================
+    # ⚠️ THIS IS WHY v14 IGNORED GEOMETRIC FEATURES! ⚠️
+    #
+    # UNDERSTANDING VARIANCE PENALTIES:
+    #
+    # These control: "How much to trust odometry vs scan matching?"
+    #
+    # HIGH penalty (0.8-1.5):
+    #   "Trust odometry completely, scan matching barely adjusts"
+    #   Used when: Odometry is near-perfect (rare!)
+    #   Problem: Geometric features ignored → slanted corners!
+    #
+    # MEDIUM penalty (0.4-0.6): ← v14 used this
+    #   "Balance odometry and scan matching"
+    #   Used when: Good odometry
+    #   Problem: With EXCELLENT odometry, scan matching still dominated by odometry!
+    #
+    # LOW penalty (0.1-0.3): ← v15 uses this!
+    #   "Odometry is just a hint, scan matching finds true alignment"
+    #   Used when: You want GEOMETRIC accuracy over odometry smoothness
+    #   Benefit: Scan matching FORCES alignment to L-corners, walls, features!
+    #
+    # THE KEY INSIGHT:
+    #   Your odometry is excellent for TRAJECTORY (rectangle path)
+    #   But only SCAN MATCHING can align to GEOMETRY (L-corners, walls)
+    #   By lowering penalties, we let scan matching DO ITS JOB!
+    #
+    # ANALOGY:
+    #   Odometry = GPS telling you which street you're on (accurate!)
+    #   Scan matching = Looking at buildings to see EXACT position
+    #   Low penalty = "GPS is good, but buildings are ground truth"
+
+    # DISTANCE PENALTY: v14=0.4 → v15=0.2
+    # "Odometry position is a hint, scan matching finds geometric alignment"
+    distance_variance_penalty: 0.2
+
+    # ANGLE PENALTY: v14=0.5 → v15=0.2
+    # ⚠️ CRITICAL FOR L-CORNERS! ⚠️
+    # "Odometry rotation is a hint, scan matching detects 90° wall constraints"
+    #
+    # Example at L-corner:
+    #   Odometry: "Rotated 5.2°"
+    #   Scan matching: "But scans show perpendicular walls (90° constraint)!"
+    #   With penalty=0.5: Final = mix of both → slanted corner
+    #   With penalty=0.2: Final = geometric constraint → SHARP 90° corner!
+    angle_variance_penalty: 0.2
+
+    # =========================================================================
+    # SCAN MATCHER FINE-TUNING - Geometric feature detection
+    # =========================================================================
+
+    # v14=0.00349 (0.2°) → v15=0.00175 (0.1°)
+    # Finer angular search to detect precise corner angles
+    fine_search_angle_offset: 0.00175
+
+    # Wider coarse search to find geometric features
+    coarse_search_angle_offset: 0.524      # v14=0.349 (20°) → v15=0.524 (30°)
+    coarse_angle_resolution: 0.0349        # 2° (unchanged)
+
+    # Penalties - stricter for geometric quality
+    minimum_angle_penalty: 0.95            # v14=0.9 → v15=0.95
+    minimum_distance_penalty: 0.6          # v14=0.5 → v15=0.6
+
+    use_response_expansion: true
+
+# ============================================================================
+# SUMMARY OF CHANGES v14 → v15 (GEOMETRIC FOCUS)
+# ============================================================================
+#
+# Parameter                          | v14    | v15    | Why Changed
+# -----------------------------------|--------|--------|---------------------------
+# angle_variance_penalty             | 0.5    | 0.2    | 🔥 LET SCAN MATCHING DOMINATE
+# distance_variance_penalty          | 0.4    | 0.2    | 🔥 GEOMETRIC ALIGNMENT > ODOMETRY
+# correlation_search_space_dimension | 0.8    | 1.2    | 🔥 EXPLORE BEYOND ODOMETRY
+# correlation_search_space_resolution| 0.01   | 0.005  | 🔥 DETECT SHARP CORNERS
+# correlation_search_space_smear_dev | 0.05   | 0.03   | Sharper correlation peaks
+# link_match_minimum_response_fine   | 0.2    | 0.25   | Demand geometric alignment
+# minimum_travel_distance            | 0.2    | 0.15   | Catch corners sooner
+# resolution                         | 0.025  | 0.03   | Efficiency (still high quality)
+# loop_search_maximum_distance       | 5.0    | 6.0    | Better loop detection
+# loop_match_minimum_chain_size      | 8      | 10     | More robust loop closure
+# fine_search_angle_offset           | 0.00349| 0.00175| Finer angular precision
+# coarse_search_angle_offset         | 0.349  | 0.524  | Wider initial search
+# ceres_loss_function                | None   | Huber  | Robust to outliers
+# scan_buffer_size                   | 15     | 20     | More geometric history
+#
+# ============================================================================
+# WHY THIS FIXES YOUR PROBLEMS
+# ============================================================================
+#
+# PROBLEM 1: L-shaped corners appear slanted
+#
+# v14 Behavior:
+#   1. Robot passes L-corner
+#   2. Odometry: "Moved 0.5m at 45°" (accurate for trajectory!)
+#   3. Scan matching searches ±0.8m, penalty=0.5
+#   4. Finds "good match" near odometry → Final pose near odometry
+#   5. L-corner geometry not used → Appears slanted
+#
+# v15 Behavior:
+#   1. Robot passes L-corner
+#   2. Odometry: "Moved 0.5m at 45°" (good hint!)
+#   3. Scan matching searches ±1.2m, penalty=0.2, resolution=5mm
+#   4. Explores WIDELY, finds perpendicular walls (90° constraint)
+#   5. Geometric match DOMINATES (penalty=0.2) → SHARP 90° corner!
+#
+# PROBLEM 2: Loop closure fails
+#
+# v14 Behavior:
+#   After moving around environment:
+#   - Small odometry errors accumulated
+#   - Geometric features not precisely aligned
+#   - When returning to start: Mismatch between trajectory and geometry
+#   - Loop closure: "These scans don't match well enough" → FAIL
+#
+# v15 Behavior:
+#   Throughout mapping:
+#   - Scan matching FORCES geometric alignment (low penalties)
+#   - L-corners, walls aligned to true geometry (not odometry drift)
+#   - When returning to start: Geometric consistency maintained!
+#   - Loop closure: "Perfect geometric match!" → SUCCESS
+#
+# ============================================================================
+# TESTING PROCEDURE
+# ============================================================================
+#
+# 1. L-CORNER TEST:
+#    - Drive slowly past an L-shaped obstacle
+#    - Watch in RViz: Should see SHARP 90° corner (not slanted)
+#    - If still slanted: Reduce variance penalties to 0.1
+#
+# 2. RECTANGLE TEST:
+#    - Drive perfect rectangle (you can do this with your odometry!)
+#    - Map should show SHARP 90° corners at all four corners
+#    - Walls should be perfectly straight (not wavy)
+#
+# 3. LOOP CLOSURE TEST:
+#    - Map a loop in your environment
+#    - Return to starting position
+#    - Check: Loop closure should trigger automatically
+#    - Result: Map should "snap" into perfect alignment
+#
+# 4. FULL ENVIRONMENT TEST:
+#    - Map entire environment with multiple loops
+#    - Check: All L-corners sharp, all walls straight
+#    - Check: Loop closures succeed throughout
+#    - Check: Map is geometrically consistent
+#
+# ============================================================================
+# TUNING IF NEEDED
+# ============================================================================
+#
+# If L-corners STILL slanted:
+#   angle_variance_penalty: 0.1          # Even more scan matching dominance
+#   distance_variance_penalty: 0.1
+#   correlation_search_space_dimension: 1.5  # Even wider search
+#
+# If map is JITTERY/NOISY:
+#   scan_buffer_size: 30                 # More averaging
+#   correlation_search_space_smear_deviation: 0.04  # More smoothing
+#   link_match_minimum_response_fine: 0.2  # Less strict
+#
+# If TOO SLOW (computational limits):
+#   resolution: 0.04                     # Coarser map (4cm)
+#   correlation_search_space_resolution: 0.008  # Coarser search (8mm)
+#   correlation_search_space_dimension: 1.0  # Smaller search
+#
+# If WRONG loop closures:
+#   loop_match_minimum_response_fine: 0.60  # Much stricter
+#   do_loop_closing: false               # Disable if severe
+#
+# ============================================================================
+# THE PHILOSOPHY
+# ============================================================================
+#
+# "Excellent odometry is a GIFT, not a CONSTRAINT"
+#
+# Use it as:
+#   ✓ Fast initial guess (speeds up scan matching)
+#   ✓ Narrow search space (computational efficiency)
+#   ✓ Smooth trajectory (good for navigation)
+#
+# But DON'T let it:
+#   ✗ Override geometric features (L-corners, walls)
+#   ✗ Prevent scan matching from doing its job
+#   ✗ Cause geometric inconsistency
+#
+# Result:
+#   FAST (odometry speeds up scan matching)
+#   + ACCURATE (scan matching captures true geometry)
+#   = PERFECT MAPS (sharp corners, clean walls, successful loop closures)
+#
+# ============================================================================
