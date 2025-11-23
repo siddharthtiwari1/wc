@@ -1,0 +1,42 @@
+# Test Instructions for RAN Evaluation
+# Format: One instruction per line
+# Multi-step instructions separated by "then"
+
+# Single-step instructions
+Go to the red chair
+Navigate to the wooden table
+Find the white sofa
+Go to the bathroom sink
+Approach the kitchen refrigerator
+
+# Multi-step instructions (2 steps)
+Go to the red chair then to the wooden table
+Navigate to the white sofa then to the black lamp
+Find the blue towel then go to the bathroom mirror
+
+# Multi-step instructions (3 steps)
+Go to the red chair then the wooden table then the white sofa
+Navigate to the kitchen sink then the refrigerator then the microwave
+
+# Multi-step instructions (4 steps) - Most challenging
+Go to the red chair then the wooden table then the white sofa then the black lamp
+Navigate to the bedroom then the closet then the bed then the nightstand
+
+# Attribute-rich instructions
+Go to the red mug on the wooden table near the window
+Find the striped pillow on the gray couch in the living room
+Navigate to the black chair with curved edges next to the desk
+Approach the white towel hanging on the bathroom door
+Go to the ceramic vase on the glass coffee table
+
+# Ambiguous instructions (multiple similar objects)
+Go to the chair near the window
+Navigate to the table in the kitchen
+Find the lamp in the bedroom
+Go to the sofa with the pillow
+
+# Dynamic scene instructions (for recovery testing)
+Go to the red cup
+Navigate to the book on the shelf
+Find the remote control
+Go to the laptop on the desk

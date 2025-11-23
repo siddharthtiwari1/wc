@@ -1,0 +1,106 @@
+% Introduction
+
+People describe destinations with attributes, not just categories:
+\textit{``go to the living area where the orange towel is on the couch.''}
+Success hinges on recognizing not only the category \textit{towel}, but binding
+properties—color, shape, texture, spatial relations—to a specific instance amid
+distractors, occlusions, and viewpoint changes.
+
+\subsection{Motivation}
+
+Current vision-and-language navigation (VLN) systems~\cite{anderson2018vlnr2r,
+huang2023vlmaps} excel at category-level localization (\textit{``go to sofa''})
+but struggle with fine-grained descriptions (\textit{``go to the white sofa with
+curved edges''}). This limitation stems from three design choices:
+
+\begin{enumerate}
+    \item \textbf{Implicit attributes}: Features are embedded into a single
+    vector, making conjunctive constraints (\textit{white} AND \textit{curved})
+    difficult to enforce.
+
+    \item \textbf{Single-view perception}: Attributes are view-dependent; color
+    changes with lighting, shape with viewing angle. Monolithic embeddings lack
+    explicit multi-view fusion.
+
+    \item \textbf{No verification stage}: Nearest-neighbor retrieval assumes the
+    top match is correct, propagating false positives when similar objects
+    coexist (\textit{e.g.}, multiple sofas).
+\end{enumerate}
+
+\subsection{Challenges in Real-World Deployment}
+
+Recent work~\cite{capnav2026} demonstrates attribute-aware navigation in
+simulation, achieving 71\% subgoal success in Habitat~\cite{habitat19iccv}.
+However, three gaps block real-world deployment:
+
+\begin{itemize}
+    \item \textbf{Sim-to-real gap}: Simulated RGB-D is noise-free; real sensors
+    (RealSense D455) exhibit depth holes, motion blur, and lighting variation.
+
+    \item \textbf{Uncertainty quantification}: Ambiguous scenes (\textit{e.g.},
+    two red mugs) require confidence scores, not binary decisions.
+
+    \item \textbf{Static assumptions}: Objects move in homes; maps must update
+    online without full reconstruction.
+\end{itemize}
+
+\subsection{Our Approach}
+
+We introduce \systemname{} (\textbf{R}eal-world \textbf{A}ttribute-aware
+\textbf{N}avigation), a system that makes attributes \textit{explicit},
+\textit{confidence-weighted}, and \textit{verifiable}.
+
+\textbf{Key insight}: Treat each attribute as a hypothesis to be tested, not a
+feature to be embedded. For example, \textit{``red mug''} decomposes into:
+\begin{itemize}
+    \item \textbf{Category}: mug (high confidence from YOLO + CLIP)
+    \item \textbf{Color}: red (medium confidence; lighting varies)
+    \item \textbf{Material}: ceramic (low confidence; needs touch/close-up)
+\end{itemize}
+
+Our system:
+\begin{enumerate}
+    \item \textbf{Confidence-weighted fusion}: Aggregate multi-view observations
+    weighted by visual quality (blur, occlusion, viewing angle).
+
+    \item \textbf{Hierarchical verification}: Cascade coarse-to-fine checks
+    (category → salient attributes → all attributes → approach and re-verify)
+    to reject false positives early.
+
+    \item \textbf{Adaptive calibration}: Tune similarity thresholds based on
+    scene clutter and attribute ambiguity, not fixed values.
+
+    \item \textbf{Online updates}: Detect moved objects via temporal consistency
+    and update instance attributes without full map rebuild.
+\end{enumerate}
+
+\subsection{Contributions}
+
+\begin{enumerate}
+    \item A \textbf{real-robot navigation system} with explicit attribute
+    verification and per-attribute confidence estimation, addressing limitations
+    in simulation-only prior work~\cite{capnav2026}.
+
+    \item A \textbf{hierarchical verification cascade} that improves full-chain
+    completion from 20\%~\cite{capnav2026} to 54.3\% on multi-step instructions.
+
+    \item \textbf{Adaptive threshold calibration} that tunes clustering and
+    retrieval bounds to scene complexity, eliminating manual tuning.
+
+    \item \textbf{Dynamic map updates} enabling navigation in non-static
+    environments with 89.2\% recovery rate when objects move.
+
+    \item Comprehensive evaluation on \textbf{5 real-world environments}
+    (homes, offices, labs) with \textbf{100+ instructions}, \textbf{4 baselines},
+    and \textbf{ablation studies}—addressing gaps in prior work that evaluated
+    on a single simulated scene~\cite{capnav2026}.
+\end{enumerate}
+
+\subsection{Paper Organization}
+
+Section~\ref{sec:related} reviews vision-language navigation and open-vocabulary
+mapping. Section~\ref{sec:problem} formalizes the attribute-aware navigation
+problem. Section~\ref{sec:method} presents our four-stage pipeline (perception,
+mapping, verification, navigation). Section~\ref{sec:experiments} reports
+real-robot results, baselines, and ablations. Section~\ref{sec:conclusion}
+concludes with limitations and future work.
