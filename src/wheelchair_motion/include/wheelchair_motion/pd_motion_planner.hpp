@@ -49,6 +49,8 @@ public:
 protected:
   geometry_msgs::msg::PoseStamped getNextPose(const geometry_msgs::msg::PoseStamped & robot_pose);
 
+  double getDistanceToGoal(const geometry_msgs::msg::PoseStamped & robot_pose);
+
   bool transformPlan(const std::string & frame);
 
   rclcpp_lifecycle::LifecycleNode::WeakPtr node_;
@@ -59,11 +61,17 @@ protected:
   rclcpp::Logger logger_ {rclcpp::get_logger("PDMotionPlanner")};
   rclcpp::Clock::SharedPtr clock_;
 
-  double kp_;
-  double kd_;
+  // PD gains - separate for linear and angular
+  double kp_linear_;
+  double kd_linear_;
+  double kp_angular_;
+  double kd_angular_;
   double step_size_;
   double max_linear_velocity_;
+  double min_linear_velocity_;
   double max_angular_velocity_;
+  double approach_velocity_scaling_dist_;
+  double transform_tolerance_;
 
   rclcpp::Time last_cycle_time_;
   double prev_angular_error_;

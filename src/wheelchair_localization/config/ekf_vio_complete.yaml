@@ -1,0 +1,159 @@
+# EKF Configuration for Complete Loosely Coupled VIO
+# Visual Odometry + Encoder Odometry + IMU
+#
+# This configuration fuses three independent odometry sources:
+# - Visual Odometry from RTAB-Map (/odom): x, y position and velocities
+# - Encoder Odometry from wc_control (/wc_control/odom): x, y position and x velocity
+# - IMU data (/imu): yaw orientation and angular velocity
+#
+# This is a "loosely coupled" system where each sensor operates independently
+# and the EKF fuses their outputs based on their covariances.
+#
+# Author: Siddharth Tiwari
+# Date: 2025-11-24
+
+ekf_filter_node:
+    ros__parameters:
+      # Update frequency
+      frequency: 30.0
+
+      # 2D planar mode for wheelchair navigation
+      two_d_mode: true
+
+      # Publish TF transform
+      publish_tf: true
+
+      # Frame IDs (REP-105 compliant)
+      map_frame: map
+      odom_frame: odom
+      base_link_frame: base_link
+      world_frame: odom
+
+      # ==================================================================
+      # VISUAL ODOMETRY (RTAB-Map)
+      # ==================================================================
+      # Topic: /odom (from rgbd_odometry node)
+      # Provides: x, y position and velocities from RGB-D visual tracking
+      # Characteristics: Scale-aware (from depth), but can drift in texture-less areas
+      odom0: /odom
+
+      # Order: x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
+      odom0_config: [true,  true,  false,    # x, y position from VO
+                     false, false, false,    # NO orientation from VO (use IMU)
+                     true,  true,  false,    # vx, vy velocities from VO
+                     false, false, false,    # angular velocities from IMU
+                     false, false, false]    # no acceleration
+
+      odom0_differential: false
+      odom0_relative: false
+      odom0_queue_size: 10
+      odom0_pose_use_child_frame: false
+
+      # ==================================================================
+      # ENCODER ODOMETRY (Wheelchair Wheels)
+      # ==================================================================
+      # Topic: /wc_control/odom (from differential_drive_controller)
+      # Provides: x, y position and x velocity from wheel encoders
+      # Characteristics: Very accurate short-term, but drifts due to wheel slip
+      odom1: /wc_control/odom
+
+      # Order: x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
+      odom1_config: [true,  true,  false,    # x, y position from encoders
+                     false, false, false,    # NO yaw from encoders (prevents drift)
+                     true,  false, false,    # x velocity from encoders
+                     false, false, false,    # angular velocities from IMU
+                     false, false, false]    # no acceleration
+
+      odom1_differential: false
+      odom1_relative: false
+      odom1_queue_size: 5
+      odom1_pose_use_child_frame: false
+
+      # ==================================================================
+      # IMU (RealSense D455)
+      # ==================================================================
+      # Topic: /imu (from imu_filter_madgwick or republisher)
+      # Provides: yaw orientation and angular velocity for 2D navigation
+      # Characteristics: No drift in orientation, stable heading reference
+      imu0: /imu
+
+      # Order: x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
+      imu0_config: [false, false, false,    # position (from odometry sources)
+                    false, false, true,     # yaw orientation from IMU
+                    false, false, false,    # velocities (from odometry sources)
+                    false, false, true,     # yaw angular velocity from IMU
+                    false, false, false]    # NO acceleration (too noisy)
+
+      imu0_differential: false
+      imu0_relative: false
+      imu0_queue_size: 10
+      imu0_remove_gravitational_acceleration: false
+
+      # ==================================================================
+      # PROCESS NOISE COVARIANCE
+      # ==================================================================
+      # Tuned for three-way fusion: VO + Encoder + IMU
+      # These values control how much the filter trusts the motion model vs measurements
+      # Balanced for wheelchair indoor navigation with multiple sensors
+      # Order: x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
+      process_noise_covariance: [0.04,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                 0.0,    0.04,   0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                 0.0,    0.0,    0.06,   0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                 0.0,    0.0,    0.0,    0.03,   0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                 0.0,    0.0,    0.0,    0.0,    0.03,   0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                 0.0,    0.0,    0.0,    0.0,    0.0,    0.03,   0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.02,    0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.02,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.04,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                                 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.01,   0.0,    0.0,    0.0,    0.0,    0.0,
+                                 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,
+                                 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.012,  0.0,    0.0,    0.0,
+                                 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.008,  0.0,    0.0,
+                                 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.008,  0.0,
+                                 0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01]
+
+      # ==================================================================
+      # INITIAL ESTIMATE COVARIANCE
+      # ==================================================================
+      initial_estimate_covariance: [1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                    0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                    0.0,    0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                    0.0,    0.0,    0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                    0.0,    0.0,    0.0,    0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                    0.0,    0.0,    0.0,    0.0,    0.0,    1e-9,   0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1e-9,   0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1e-9,   0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1e-9,   0.0,     0.0,     0.0,     0.0,    0.0,    0.0,
+                                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    1e-9,    0.0,     0.0,     0.0,    0.0,    0.0,
+                                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     1e-9,    0.0,     0.0,    0.0,    0.0,
+                                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     1e-9,    0.0,    0.0,    0.0,
+                                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     1e-9,   0.0,    0.0,
+                                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    1e-9,   0.0,
+                                    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,     0.0,     0.0,     0.0,    0.0,    1e-9]
+
+      # ==================================================================
+      # NOTES ON SENSOR FUSION STRATEGY
+      # ==================================================================
+      #
+      # Position (x, y):
+      #   - Primary: Visual Odometry (scale-aware, good in textured environments)
+      #   - Secondary: Encoder Odometry (accurate short-term, complements VO)
+      #   - EKF will weight them based on their covariances
+      #
+      # Orientation (yaw):
+      #   - Exclusive: IMU (no drift, absolute reference)
+      #   - Encoders and VO do NOT provide yaw to prevent drift
+      #
+      # Linear Velocity (vx, vy):
+      #   - VO provides both vx and vy from optical flow
+      #   - Encoders provide only vx (differential drive constraint)
+      #   - EKF fuses both for smooth velocity estimate
+      #
+      # Angular Velocity (vyaw):
+      #   - Exclusive: IMU gyroscope
+      #
+      # This configuration creates a robust system where:
+      # - VO corrects encoder drift from wheel slip
+      # - Encoders provide reliable velocity when VO tracking is poor
+      # - IMU provides drift-free heading reference
+      # - All sensors operate independently (loosely coupled)

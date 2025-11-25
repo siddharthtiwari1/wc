@@ -83,6 +83,8 @@ private:
   
   unsigned int poseToCell(const GraphNode & node);
 
+  double euclideanDistance(const GraphNode &node, const GraphNode &goal_node);
+
   double manhattanDistance(const GraphNode &node, const GraphNode &goal_node);
 };
 

@@ -1,0 +1,150 @@
+# ============================================================================
+# SLAM Toolbox - CLUTTERED ENVIRONMENT CONFIG
+# ============================================================================
+# Optimized to REDUCE NOISE when mapping in cluttered/dynamic environments
+# Key changes from v14r25:
+#   - Lower resolution (0.05m) - ignores small objects
+#   - Shorter laser range (8m) - avoids distant clutter
+#   - Higher smear (0.06) - averages out transient objects
+#   - Stricter match thresholds - rejects poor scans
+#   - Slower scan rate - waits for stable readings
+# ============================================================================
+
+slam_toolbox:
+  ros__parameters:
+
+    # ========================================================================
+    # SOLVER (same as before - robust)
+    # ========================================================================
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: HuberLoss  # Robust to outliers
+
+    # ========================================================================
+    # ROS PARAMETERS
+    # ========================================================================
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+    scan_topic: /scan
+    use_map_saver: true
+    mode: mapping
+
+    # ========================================================================
+    # NOISE REDUCTION #1: LOWER RESOLUTION
+    # ========================================================================
+    # 0.02m captures every tiny detail (including clutter)
+    # 0.05m ignores objects smaller than 5cm
+    # Trade-off: Less detail, but cleaner walls
+    resolution: 0.05
+
+    # ========================================================================
+    # NOISE REDUCTION #2: SHORTER LASER RANGE
+    # ========================================================================
+    # 12m captures people walking in adjacent rooms
+    # 8m focuses on immediate environment
+    max_laser_range: 8.0
+
+    # ========================================================================
+    # NOISE REDUCTION #3: SLOWER SCAN INTEGRATION
+    # ========================================================================
+    # 0.1s = 10 scans/sec - captures transient objects
+    # 0.3s = 3.3 scans/sec - only persistent objects get mapped
+    minimum_time_interval: 0.3
+
+    # ========================================================================
+    # NOISE REDUCTION #4: LARGER SMEAR (BLUR)
+    # ========================================================================
+    # 0.03 = sharp correlation - every point matters
+    # 0.06 = blurred correlation - averages nearby points
+    # This "softens" the map, averaging out noise
+    correlation_search_space_smear_deviation: 0.06
+    loop_search_space_smear_deviation: 0.06
+
+    # ========================================================================
+    # NOISE REDUCTION #5: STRICTER MATCH QUALITY
+    # ========================================================================
+    # Reject scans that don't match well (likely noise/clutter)
+    link_match_minimum_response_fine: 0.45   # Was 0.30
+    loop_match_minimum_response_fine: 0.50   # Was 0.45
+    loop_match_minimum_response_coarse: 0.45 # Was 0.40
+
+    # ========================================================================
+    # MOVEMENT THRESHOLDS (keep Hector values)
+    # ========================================================================
+    use_scan_matching: true
+    use_scan_barycenter: true
+    minimum_travel_distance: 0.40
+    minimum_travel_heading: 0.08
+
+    # ========================================================================
+    # SMALLER SCAN BUFFER (less history = less accumulated noise)
+    # ========================================================================
+    scan_buffer_size: 15  # Was 30
+    scan_buffer_maximum_scan_distance: 8.0  # Match laser range
+
+    # ========================================================================
+    # PERFORMANCE PARAMETERS
+    # ========================================================================
+    debug_logging: false
+    throttle_scans: 1
+    transform_publish_period: 0.02
+    map_update_interval: 3.0  # Slower updates = smoother map
+    transform_timeout: 0.2
+    tf_buffer_duration: 30.0
+    stack_size_to_use: 40000000
+    enable_interactive_mode: true
+
+    # ========================================================================
+    # CORRELATION SEARCH
+    # ========================================================================
+    correlation_search_space_dimension: 0.5
+    correlation_search_space_resolution: 0.01  # Coarser = faster + ignores tiny variations
+
+    # ========================================================================
+    # LOOP CLOSURE (more conservative)
+    # ========================================================================
+    do_loop_closing: true
+    loop_search_maximum_distance: 10.0  # Reduced from 15m
+    loop_match_minimum_chain_size: 10   # Need more consistent matches
+    loop_match_maximum_variance_coarse: 3.0
+    loop_search_space_dimension: 8.0
+    loop_search_space_resolution: 0.05
+
+    # ========================================================================
+    # VARIANCE PENALTIES (trust odometry more in cluttered env)
+    # ========================================================================
+    # In clutter, scan matching can be fooled by moving objects
+    # Trust odometry more (lower values = more penalty for deviation)
+    distance_variance_penalty: 0.35  # Was 0.45 (more odom trust)
+    angle_variance_penalty: 0.35     # Was 0.45 (more odom trust)
+
+    # ========================================================================
+    # SCAN MATCHER
+    # ========================================================================
+    fine_search_angle_offset: 0.00349
+    coarse_search_angle_offset: 0.174
+    coarse_angle_resolution: 0.0349
+    minimum_angle_penalty: 0.9
+    minimum_distance_penalty: 0.5
+    use_response_expansion: true
+
+# ============================================================================
+# SUMMARY OF CHANGES FOR CLUTTERED ENVIRONMENT
+# ============================================================================
+#
+# | Parameter                    | v14r25 | Cluttered | Effect              |
+# |------------------------------|--------|-----------|---------------------|
+# | resolution                   | 0.02   | 0.05      | Ignores small stuff |
+# | max_laser_range              | 12.0   | 8.0       | Focus on nearby     |
+# | minimum_time_interval        | 0.1    | 0.3       | Skip transients     |
+# | smear_deviation              | 0.03   | 0.06      | Average out noise   |
+# | link_match_min_response      | 0.30   | 0.45      | Reject bad scans    |
+# | scan_buffer_size             | 30     | 15        | Less noise history  |
+# | variance_penalties           | 0.45   | 0.35      | Trust odometry more |
+#
+# Expected result: Cleaner walls, less scattered dots, but less fine detail
+# ============================================================================

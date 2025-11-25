@@ -61,9 +61,16 @@ install(FILES global_planner_plugins.xml
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(DIRECTORY
+  launch
+  config
+  DESTINATION share/${PROJECT_NAME}
+)
+
 install(PROGRAMS
   ${PROJECT_NAME}/a_star_planner.py
   ${PROJECT_NAME}/dijkstra_planner.py
+  ${PROJECT_NAME}/goal_to_plan.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -1,0 +1,174 @@
+# ============================================================================
+# SLAM Toolbox - NO DOTS / MAXIMUM CLEAN MAP
+# ============================================================================
+# AGGRESSIVE noise removal - use this if you still see scattered dots
+#
+# Key anti-dot parameters:
+#   - resolution: 0.05m (ignores objects <5cm)
+#   - smear: 0.06 (heavy averaging/blur)
+#   - minimum_time_interval: 0.2s (only 5Hz - skips transients)
+#   - match_threshold: 0.50 (very strict - rejects most noisy scans)
+#   - max_laser_range: 12m (avoids distant noise)
+#
+# Trade-off: Less fine detail, but MUCH cleaner walls
+# ============================================================================
+
+slam_toolbox:
+  ros__parameters:
+
+    # ========================================================================
+    # SOLVER - ROBUST
+    # ========================================================================
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: HuberLoss
+
+    # ========================================================================
+    # ROS PARAMETERS
+    # ========================================================================
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+    scan_topic: /scan
+    use_map_saver: true
+    mode: mapping
+
+    # ========================================================================
+    # ANTI-DOT #1: COARSER RESOLUTION
+    # ========================================================================
+    # 0.05m = 5cm cells
+    # Small dots (1-4cm) disappear into the grid
+    resolution: 0.05
+
+    # ========================================================================
+    # ANTI-DOT #2: SLOW SCAN RATE
+    # ========================================================================
+    # 0.2s = only 5 scans/second
+    # Person walking through? They're GONE before next scan!
+    minimum_time_interval: 0.2
+
+    throttle_scans: 1
+
+    # ========================================================================
+    # ANTI-DOT #3: SHORT RANGE
+    # ========================================================================
+    # Only use nearby readings (most accurate)
+    # Distant noise/reflections ignored
+    max_laser_range: 12.0
+
+    # ========================================================================
+    # ANTI-DOT #4: HEAVY SMEAR/BLUR
+    # ========================================================================
+    # 0.06 = heavy averaging
+    # Isolated dots get blurred out
+    # Only consistent features (walls) stay sharp
+    correlation_search_space_smear_deviation: 0.06
+    loop_search_space_smear_deviation: 0.06
+
+    correlation_search_space_resolution: 0.005
+    correlation_search_space_dimension: 0.5
+
+    # ========================================================================
+    # ANTI-DOT #5: VERY STRICT MATCH THRESHOLD
+    # ========================================================================
+    # 0.50 = scan must match 50% quality
+    # Noisy scans get REJECTED completely
+    link_match_minimum_response_fine: 0.50
+    link_scan_maximum_distance: 1.0
+
+    # ========================================================================
+    # ANTI-DOT #6: STRONG ODOMETRY TRUST
+    # ========================================================================
+    # Low values = heavy penalty for scan matching deviation
+    # Your EKF guides through clutter
+    distance_variance_penalty: 0.32
+    angle_variance_penalty: 0.32
+
+    # ========================================================================
+    # MOVEMENT THRESHOLDS - LESS FREQUENT UPDATES
+    # ========================================================================
+    use_scan_matching: true
+    use_scan_barycenter: true
+
+    # Larger = fewer updates = fewer chances for noise
+    minimum_travel_distance: 0.50        # Update every 50cm
+    minimum_travel_heading: 0.12         # Update every ~7°
+
+    # ========================================================================
+    # SCAN BUFFER - SMALL
+    # ========================================================================
+    scan_buffer_size: 15                 # Less history = less noise
+    scan_buffer_maximum_scan_distance: 10.0
+
+    # ========================================================================
+    # PERFORMANCE
+    # ========================================================================
+    debug_logging: false
+    transform_publish_period: 0.02
+    map_update_interval: 3.0             # Slow updates = smoother
+    transform_timeout: 0.2
+    tf_buffer_duration: 30.0
+    stack_size_to_use: 40000000
+    enable_interactive_mode: true
+
+    # ========================================================================
+    # ANGULAR SEARCH
+    # ========================================================================
+    fine_search_angle_offset: 0.003
+    coarse_search_angle_offset: 0.15
+    coarse_angle_resolution: 0.03
+
+    # ========================================================================
+    # LOOP CLOSURE - VERY STRICT
+    # ========================================================================
+    do_loop_closing: true
+    loop_search_maximum_distance: 10.0
+    loop_match_minimum_chain_size: 12    # Need MANY consistent matches
+    loop_match_maximum_variance_coarse: 2.0
+    loop_match_minimum_response_coarse: 0.50   # Very strict
+    loop_match_minimum_response_fine: 0.55     # Very strict
+
+    loop_search_space_dimension: 8.0
+    loop_search_space_resolution: 0.05
+
+    # ========================================================================
+    # PENALTY FLOORS
+    # ========================================================================
+    minimum_angle_penalty: 0.9
+    minimum_distance_penalty: 0.5
+    use_response_expansion: true
+
+# ============================================================================
+# COMPARISON: s3_max vs no_dots
+# ============================================================================
+#
+# | Parameter                    | s3_max  | no_dots | Effect           |
+# |------------------------------|---------|---------|------------------|
+# | resolution                   | 0.03    | 0.05    | Coarser grid     |
+# | minimum_time_interval        | 0.07    | 0.20    | 3x slower        |
+# | max_laser_range              | 20.0    | 12.0    | Shorter range    |
+# | smear_deviation              | 0.045   | 0.06    | More blur        |
+# | link_match_min_response      | 0.40    | 0.50    | Stricter         |
+# | variance_penalty             | 0.38    | 0.32    | More odom trust  |
+# | minimum_travel_distance      | 0.45    | 0.50    | Less frequent    |
+# | loop_match_min_response      | 0.50    | 0.55    | Very strict      |
+#
+# ============================================================================
+# WHEN TO USE THIS CONFIG
+# ============================================================================
+#
+# Use slam_toolbox_no_dots.yaml when:
+#   - You STILL see scattered dots with s3_max
+#   - Environment is VERY cluttered (many people, objects)
+#   - You prefer CLEAN map over fine detail
+#   - Walls are more important than small features
+#
+# Do NOT use when:
+#   - You need fine detail (furniture outlines, etc.)
+#   - Environment is already clean
+#   - You're mapping narrow passages (<50cm)
+#
+# ============================================================================

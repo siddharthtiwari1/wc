@@ -1,0 +1,174 @@
+# ============================================================================
+# SLAM Toolbox - S3 MAXIMUM + NOISE REDUCTION
+# ============================================================================
+# Combines:
+#   1. Maximum RPLidar S3 utilization (20Hz, 25m range, fine precision)
+#   2. Noise reduction for cluttered environments
+#
+# RPLidar S3 Specs:
+#   - Range: 0.1m - 40m
+#   - Points: 3200/scan @ 10Hz, 1600/scan @ 20Hz
+#   - Angular Resolution: 0.1125° (0.00196 rad)
+#   - Accuracy: ±3cm @ 10m
+#
+# Noise Reduction Strategy:
+#   - Stricter match thresholds (reject poor scans from clutter)
+#   - Moderate smear (average out transient objects)
+#   - Trust odometry more (clutter confuses scan matching)
+#   - HuberLoss (robust to outliers)
+# ============================================================================
+
+slam_toolbox:
+  ros__parameters:
+
+    # ========================================================================
+    # SOLVER - ROBUST TO OUTLIERS (CRITICAL FOR CLUTTER!)
+    # ========================================================================
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+
+    # HUBER LOSS: Key for cluttered environments!
+    # Reduces impact of outlier scans (people, moved objects)
+    ceres_loss_function: HuberLoss
+
+    # ========================================================================
+    # ROS PARAMETERS
+    # ========================================================================
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+    scan_topic: /scan
+    use_map_saver: true
+    mode: mapping
+
+    # ========================================================================
+    # RESOLUTION - BALANCED FOR S3 + NOISE
+    # ========================================================================
+    # 0.02m captures S3's precision but also captures small clutter
+    # 0.03m is a good balance - still high quality, less noise
+    resolution: 0.03
+
+    # ========================================================================
+    # S3 OPTIMIZATION: USE MORE SCANS
+    # ========================================================================
+    # S3 at 20Hz, use 15Hz (not all - gives time to filter)
+    # 0.07s = ~14Hz (was 0.1s = 10Hz)
+    minimum_time_interval: 0.07
+
+    throttle_scans: 1
+
+    # ========================================================================
+    # S3 OPTIMIZATION: USE MORE RANGE (but not too much for indoor)
+    # ========================================================================
+    # 20m is good for indoor - captures room but not distant noise
+    max_laser_range: 20.0
+
+    # ========================================================================
+    # NOISE REDUCTION: MODERATE SMEAR
+    # ========================================================================
+    # Sharp (0.03) = every point matters = noise captured
+    # Moderate (0.045) = averages nearby points = smooths noise
+    correlation_search_space_smear_deviation: 0.045
+    loop_search_space_smear_deviation: 0.045
+
+    # S3 precision correlation search
+    correlation_search_space_resolution: 0.004
+    correlation_search_space_dimension: 0.5
+
+    # ========================================================================
+    # NOISE REDUCTION: STRICTER MATCH THRESHOLDS
+    # ========================================================================
+    # Reject scans that don't match well (likely noise/clutter)
+    link_match_minimum_response_fine: 0.40      # Was 0.30 - stricter!
+    link_scan_maximum_distance: 1.2
+
+    # ========================================================================
+    # NOISE REDUCTION: TRUST ODOMETRY MORE
+    # ========================================================================
+    # In clutter, scan matching can be fooled
+    # Lower values = more penalty for deviating from odometry
+    distance_variance_penalty: 0.38    # Was 0.45 (more odom trust)
+    angle_variance_penalty: 0.38       # Was 0.45 (more odom trust)
+
+    # ========================================================================
+    # S3 OPTIMIZATION: FINE ANGULAR SEARCH
+    # ========================================================================
+    fine_search_angle_offset: 0.002      # ~0.11° (matches S3's 0.1125°)
+    coarse_search_angle_offset: 0.15     # ±8.6°
+    coarse_angle_resolution: 0.03        # ~1.7° steps
+
+    # ========================================================================
+    # MOVEMENT THRESHOLDS
+    # ========================================================================
+    use_scan_matching: true
+    use_scan_barycenter: true
+
+    # Slightly larger thresholds = less frequent updates = less noise integration
+    minimum_travel_distance: 0.45        # Was 0.40
+    minimum_travel_heading: 0.09         # ~5.2° (was 4.6°)
+
+    # ========================================================================
+    # SCAN BUFFER - MODERATE FOR NOISE FILTERING
+    # ========================================================================
+    scan_buffer_size: 25                 # Was 30 - less history = less accumulated noise
+    scan_buffer_maximum_scan_distance: 12.0
+
+    # ========================================================================
+    # PERFORMANCE PARAMETERS
+    # ========================================================================
+    debug_logging: false
+    transform_publish_period: 0.02
+    map_update_interval: 2.5             # Slower = smoother map
+    transform_timeout: 0.2
+    tf_buffer_duration: 30.0
+    stack_size_to_use: 40000000
+    enable_interactive_mode: true
+
+    # ========================================================================
+    # LOOP CLOSURE - CONSERVATIVE FOR CLUTTER
+    # ========================================================================
+    do_loop_closing: true
+    loop_search_maximum_distance: 15.0   # Not too far in cluttered space
+    loop_match_minimum_chain_size: 10    # Need more consistent matches
+    loop_match_maximum_variance_coarse: 2.5
+    loop_match_minimum_response_coarse: 0.45   # Stricter
+    loop_match_minimum_response_fine: 0.50     # Stricter
+
+    loop_search_space_dimension: 10.0
+    loop_search_space_resolution: 0.05
+
+    # ========================================================================
+    # PENALTY FLOORS
+    # ========================================================================
+    minimum_angle_penalty: 0.9
+    minimum_distance_penalty: 0.5
+    use_response_expansion: true
+
+# ============================================================================
+# CONFIGURATION PHILOSOPHY
+# ============================================================================
+#
+# S3 MAXIMIZATION:
+#   ✓ 14Hz scan rate (70% of S3's 20Hz - leaves room for filtering)
+#   ✓ 20m range (50% of S3's 40m - good for indoor)
+#   ✓ 4mm correlation resolution (matches S3's ±3cm accuracy)
+#   ✓ 0.11° angular search (matches S3's 0.1125° resolution)
+#
+# NOISE REDUCTION:
+#   ✓ 0.03m resolution (ignores objects <3cm)
+#   ✓ HuberLoss (robust to outlier scans)
+#   ✓ 0.045 smear (averages out transient objects)
+#   ✓ 0.40 match threshold (rejects poor scans)
+#   ✓ 0.38 variance penalties (trust odometry in clutter)
+#   ✓ Larger movement thresholds (less frequent updates)
+#
+# EXPECTED RESULTS:
+#   - Clean walls without scattered dots
+#   - Sharp corners preserved
+#   - Good loop closure
+#   - ~65% CPU usage
+#
+# ============================================================================

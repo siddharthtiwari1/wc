@@ -54,7 +54,7 @@ def generate_launch_description():
         'global_localization.rviz',
     )
     # Default map file
-    default_map_file = '/home/sidd/maps/wheelchair_nav.yaml'
+    default_map_file = '/home/sidd/wc/maps/my_map.yaml'
 
     # Detect ROS distro for compatibility
     ros_distro = os.environ.get('ROS_DISTRO', 'jazzy')
@@ -135,7 +135,7 @@ def generate_launch_description():
         default_value=os.path.join(
             wheelchair_localization_dir,
             'config',
-            'amcl.yaml'
+            'amcl_v2.yaml'
         ),
         description='Full path to AMCL yaml configuration file',
     )
@@ -144,6 +144,7 @@ def generate_launch_description():
     is_sim = LaunchConfiguration('is_sim')
     map_name = LaunchConfiguration('map_name')
     amcl_config = LaunchConfiguration('amcl_config')
+    use_rviz = LaunchConfiguration('rviz')
 
     # ========================================================================
     # USB PERMISSIONS SETUP (only for real hardware)
@@ -342,6 +343,26 @@ def generate_launch_description():
     )
 
     # ========================================================================
+    # VELOCITY COMMAND BRIDGE (CRITICAL FOR MOTION)
+    # ========================================================================
+    # diff_drive_controller expects TwistStamped on /wc_control/cmd_vel
+    # Nav2 and teleop publish Twist on /cmd_vel
+    # This bridge converts Twist → TwistStamped with proper timestamps
+    # Benefits: Stale command detection, latency compensation, safety timeouts
+
+    twist_to_stamped_converter = Node(
+        package='scripts',
+        executable='twist_stamped_teleop',
+        name='cmd_vel_bridge',
+        output='screen',
+        parameters=[{'use_sim_time': is_sim}],
+        remappings=[
+            ('cmd_vel_in', '/cmd_vel'),
+            ('cmd_vel_out', '/wc_control/cmd_vel'),
+        ],
+    )
+
+    # ========================================================================
     # DATA LOGGER
     # ========================================================================
 
@@ -364,6 +385,7 @@ def generate_launch_description():
     # ========================================================================
 
     # RViz launches with a delay to ensure topics and transforms are available
+    # Only launch if use_rviz is true (default)
     rviz_node = TimerAction(
         period=11.0,  # Wait for AMCL and all sensors to be ready
         actions=[
@@ -375,6 +397,7 @@ def generate_launch_description():
                 arguments=['-d', default_rviz_config],
                 parameters=[{'use_sim_time': is_sim}],
                 additional_env={'DISPLAY': ':1'},
+                condition=IfCondition(use_rviz),
             )
         ],
     )
@@ -416,6 +439,9 @@ def generate_launch_description():
         nav2_map_server,
         nav2_amcl,
         nav2_lifecycle_manager,
+
+        # Velocity command bridge (enables /cmd_vel → controller)
+        twist_to_stamped_converter,
 
         # Visualization and logging
         topic_data_logger,

@@ -1,10 +1,6 @@
 ###############################################################################
-# WHEELCHAIR NAV2 PARAMETERS - TOP CLASS
+# WHEELCHAIR NAV2 PARAMETERS - CLEAN CONFIG (NO DEPTH CAMERA IN COSTMAPS)
 ###############################################################################
-# Optimized for safe, smooth autonomous wheelchair navigation
-# Hardware: RPLidar S3, RealSense D455 IMU, Differential Drive
-# Environment: Indoor (hospitals, offices, homes)
-# Safety: MAXIMUM PRIORITY for human-carrying robot
 
 bt_navigator:
   ros__parameters:
@@ -14,54 +10,10 @@ bt_navigator:
     odom_topic: /odometry/filtered
     bt_loop_duration: 10
     default_server_timeout: 20
-    # Behavior tree - use default for wheelchair
-    default_nav_to_pose_bt_xml: ""
-    default_nav_through_poses_bt_xml: ""
-    plugin_lib_names:
-      - nav2_compute_path_to_pose_action_bt_node
-      - nav2_compute_path_through_poses_action_bt_node
-      - nav2_smooth_path_action_bt_node
-      - nav2_follow_path_action_bt_node
-      - nav2_spin_action_bt_node
-      - nav2_wait_action_bt_node
-      - nav2_back_up_action_bt_node
-      - nav2_drive_on_heading_bt_node
-      - nav2_clear_costmap_service_bt_node
-      - nav2_is_stuck_condition_bt_node
-      - nav2_goal_reached_condition_bt_node
-      - nav2_goal_updated_condition_bt_node
-      - nav2_globally_updated_goal_condition_bt_node
-      - nav2_is_path_valid_condition_bt_node
-      - nav2_initial_pose_received_condition_bt_node
-      - nav2_reinitialize_global_localization_service_bt_node
-      - nav2_rate_controller_bt_node
-      - nav2_distance_controller_bt_node
-      - nav2_speed_controller_bt_node
-      - nav2_truncate_path_action_bt_node
-      - nav2_truncate_path_local_action_bt_node
-      - nav2_goal_updater_node_bt_node
-      - nav2_recovery_node_bt_node
-      - nav2_pipeline_sequence_bt_node
-      - nav2_round_robin_node_bt_node
-      - nav2_transform_available_condition_bt_node
-      - nav2_time_expired_condition_bt_node
-      - nav2_path_expiring_timer_condition_bt_node
-      - nav2_distance_traveled_condition_bt_node
-      - nav2_single_trigger_bt_node
-      - nav2_goal_updated_controller_bt_node
-      - nav2_is_battery_low_condition_bt_node
-      - nav2_navigate_through_poses_action_bt_node
-      - nav2_navigate_to_pose_action_bt_node
-      - nav2_remove_passed_goals_action_bt_node
-      - nav2_planner_selector_bt_node
-      - nav2_controller_selector_bt_node
-      - nav2_goal_checker_selector_bt_node
-      - nav2_controller_cancel_bt_node
-      - nav2_path_longer_on_approach_bt_node
-      - nav2_wait_cancel_bt_node
-      - nav2_spin_cancel_bt_node
-      - nav2_back_up_cancel_bt_node
-      - nav2_drive_on_heading_cancel_bt_node
+    transform_tolerance: 0.3
+    default_nav_to_pose_bt_xml: /opt/ros/jazzy/share/nav2_bt_navigator/behavior_trees/navigate_w_replanning_distance.xml
+    default_nav_through_poses_bt_xml: /opt/ros/jazzy/share/nav2_bt_navigator/behavior_trees/navigate_through_poses_w_replanning_and_recovery.xml
+    # Note: plugin_lib_names removed - Nav2 Jazzy loads default plugins automatically
 
 bt_navigator_navigate_through_poses_rclcpp_node:
   ros__parameters:
@@ -72,195 +24,150 @@ bt_navigator_navigate_to_pose_rclcpp_node:
     use_sim_time: false
 
 ###############################################################################
-# CONTROLLER SERVER - DWB (Dynamic Window Approach)
+# CONTROLLER SERVER - Regulated Pure Pursuit
 ###############################################################################
 controller_server:
   ros__parameters:
     use_sim_time: false
-    controller_frequency: 20.0  # 20Hz control loop (smooth)
+    controller_frequency: 20.0
     min_x_velocity_threshold: 0.001
-    min_y_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.5
     min_theta_velocity_threshold: 0.001
     failure_tolerance: 0.3
     progress_checker_plugin: "progress_checker"
     goal_checker_plugins: ["general_goal_checker"]
     controller_plugins: ["FollowPath"]
+    odom_topic: /odometry/filtered
 
-    # Progress checker - ensure robot is making progress
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
       required_movement_radius: 0.5
       movement_time_allowance: 10.0
 
-    # Goal checker - when is goal considered reached
     general_goal_checker:
-      stateful: true
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.15      # 15cm position tolerance (tight for wheelchair)
-      yaw_goal_tolerance: 0.15     # ~8.6° orientation tolerance
-
-    # Option 1: Wheelchair Pure Pursuit (from bumperbot, customized)
-    # FollowPath:
-    #   plugin: "wheelchair_motion::PurePursuit"
-    #   look_ahead_distance: 0.5
-    #   max_linear_velocity: 0.5
-    #   max_angular_velocity: 0.8
-
-    # Option 2: Wheelchair PD Controller (from bumperbot, customized)
-    # FollowPath:
-    #   plugin: "wheelchair_motion::PDMotionPlanner"
-    #   kp: 2.0
-    #   kd: 0.1
-    #   max_linear_velocity: 0.5
-    #   max_angular_velocity: 0.8
-    #   step_size: 0.1
-
-    # Option 3: DWB Controller (industry-standard Nav2, RECOMMENDED)
-    FollowPath:
-      plugin: "dwb_core::DWBLocalPlanner"
-      debug_trajectory_details: false
-      min_vel_x: 0.0               # Can stop
-      min_vel_y: 0.0
-      max_vel_x: 0.5               # 0.5 m/s max (SAFE for wheelchair with person!)
-      max_vel_y: 0.0               # No lateral movement (differential drive)
-      max_vel_theta: 0.8           # 0.8 rad/s = ~45°/s (smooth turning)
-      min_speed_xy: 0.0
-      max_speed_xy: 0.5            # Match max_vel_x
-      min_speed_theta: 0.0
-      # Acceleration limits - SMOOTH for passenger comfort
-      acc_lim_x: 0.3               # 0.3 m/s² (gentle acceleration)
-      acc_lim_y: 0.0
-      acc_lim_theta: 1.5           # 1.5 rad/s² (smooth rotation)
-      decel_lim_x: -0.4            # -0.4 m/s² (gentle braking)
-      decel_lim_y: 0.0
-      decel_lim_theta: -2.0        # Can brake rotation faster
-      vx_samples: 20               # Sample 20 velocities (good coverage)
-      vy_samples: 0                # No Y samples (diff drive)
-      vtheta_samples: 40           # 40 angular samples (very smooth paths)
-      sim_time: 2.0                # Simulate 2 seconds ahead
-      linear_granularity: 0.05     # 5cm granularity
-      angular_granularity: 0.025   # ~1.4° granularity
-      transform_tolerance: 0.2
-      xy_goal_tolerance: 0.15
-      yaw_goal_tolerance: 0.15
-      trans_stopped_velocity: 0.05
-      short_circuit_trajectory_evaluation: true
+      xy_goal_tolerance: 0.25
+      yaw_goal_tolerance: 0.25
       stateful: true
 
-      # Critics (trajectory scoring) - Wheelchair priorities
-      critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-
-      BaseObstacle.scale: 0.02     # Obstacle avoidance (highest priority)
-      PathAlign.scale: 32.0        # Stay on path
-      PathAlign.forward_point_distance: 0.1
-      GoalAlign.scale: 24.0        # Align with goal
-      GoalAlign.forward_point_distance: 0.1
-      PathDist.scale: 32.0         # Follow path distance
-      GoalDist.scale: 24.0         # Get to goal
-      RotateToGoal.scale: 32.0     # Rotate to goal heading
-      RotateToGoal.slowing_factor: 5.0
-      RotateToGoal.lookahead_time: -1.0
-      Oscillation.scale: 1.0       # Prevent oscillation
-      Oscillation.oscillation_reset_dist: 0.05
-      Oscillation.oscillation_reset_angle: 0.2
-      Oscillation.oscillation_reset_time: -1.0
-
-      # Wheelchair safety: Prefer smooth, predictable paths
-      prune_plan: true
-      prune_distance: 1.0
-      shorten_transformed_plan: true
-      prefer_forward: true
+    FollowPath:
+      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      desired_linear_vel: 0.4
+      lookahead_dist: 0.8
+      min_lookahead_dist: 0.4
+      max_lookahead_dist: 1.2
+      lookahead_time: 1.5
+      rotate_to_heading_angular_vel: 0.8
+      transform_tolerance: 0.2
+      use_velocity_scaled_lookahead_dist: false
+      min_approach_linear_velocity: 0.05
+      approach_velocity_scaling_dist: 1.0
+      use_collision_detection: true
+      max_allowed_time_to_collision_up_to_carrot: 1.0
+      use_regulated_linear_velocity_scaling: true
+      use_cost_regulated_linear_velocity_scaling: false
+      regulated_linear_scaling_min_radius: 0.9
+      regulated_linear_scaling_min_speed: 0.15
+      use_fixed_curvature_lookahead: false
+      curvature_lookahead_dist: 1.0
+      use_rotate_to_heading: true
+      rotate_to_heading_min_angle: 0.785
+      max_angular_accel: 1.5
+      max_robot_pose_search_dist: 10.0
+      interpolate_curvature_after_goal: false
+      cost_scaling_dist: 0.3
+      cost_scaling_gain: 1.0
+      inflation_cost_scaling_factor: 3.0
 
 controller_server_rclcpp_node:
   ros__parameters:
     use_sim_time: false
 
 ###############################################################################
-# LOCAL COSTMAP - Obstacle Avoidance
+# LOCAL COSTMAP - Rolling Window (LIDAR ONLY - NO DEPTH CAMERA)
 ###############################################################################
 local_costmap:
   local_costmap:
     ros__parameters:
-      update_frequency: 5.0         # 5Hz updates (responsive)
-      publish_frequency: 2.0        # 2Hz publishing (sufficient)
+      update_frequency: 5.0
+      publish_frequency: 2.0
       global_frame: odom
       robot_base_frame: base_link
       use_sim_time: false
-      rolling_window: true          # Move with robot
-      width: 5                      # 5m x 5m local costmap
-      height: 5
-      resolution: 0.05              # 5cm resolution (fine for obstacles)
-      robot_radius: 0.4             # 40cm robot radius (wheelchair + clearance)
-      plugins: ["voxel_layer", "inflation_layer"]
+      rolling_window: true
+      width: 4
+      height: 4
+      resolution: 0.05
+      robot_radius: 0.22
+      plugins: ["obstacle_layer", "inflation_layer"]
 
-      # Inflation layer - Safety clearance
-      inflation_layer:
-        plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0    # How fast cost decreases
-        inflation_radius: 0.8       # 80cm inflation (SAFE for wheelchair)
-
-      # Voxel layer - 3D obstacle detection
-      voxel_layer:
-        plugin: "nav2_costmap_2d::VoxelLayer"
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
-        publish_voxel_map: false
-        origin_z: 0.0
-        z_resolution: 0.05
-        z_voxels: 16
-        max_obstacle_height: 2.0    # Consider obstacles up to 2m
-        mark_threshold: 0
         observation_sources: scan
-
         scan:
           topic: /scan
           max_obstacle_height: 2.0
           clearing: true
           marking: true
           data_type: "LaserScan"
-          raytrace_max_range: 20.0  # RPLidar S3 range
+          raytrace_max_range: 15.0
           raytrace_min_range: 0.0
-          obstacle_max_range: 19.0
+          obstacle_max_range: 12.0
           obstacle_min_range: 0.0
 
-      # Static layer
-      static_layer:
-        plugin: "nav2_costmap_2d::StaticLayer"
-        map_subscribe_transient_local: true
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.35
 
-      # Always say "draw behind robot"
       always_send_full_costmap: true
 
 ###############################################################################
-# GLOBAL COSTMAP - Path Planning
+# GLOBAL COSTMAP - Map + Obstacles (LIDAR ONLY - NO DEPTH CAMERA)
 ###############################################################################
 global_costmap:
   global_costmap:
     ros__parameters:
-      update_frequency: 1.0         # 1Hz updates (less frequent)
+      update_frequency: 1.0
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_link
       use_sim_time: false
-      robot_radius: 0.4             # 40cm robot radius
-      resolution: 0.05              # 5cm resolution
+      robot_radius: 0.22
+      resolution: 0.05
       track_unknown_space: true
-      plugins: ["static_layer", "inflation_layer"]
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
 
-      # Static layer - From saved map
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: true
+        map_topic: /map
 
-      # Inflation layer - Path planning clearance
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /scan
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: true
+          data_type: "LaserScan"
+          raytrace_max_range: 15.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 12.0
+          obstacle_min_range: 0.0
+
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
-        inflation_radius: 0.8       # 80cm clearance
+        inflation_radius: 0.35
 
       always_send_full_costmap: true
 
 ###############################################################################
-# PLANNER SERVER - Global Path Planning
+# PLANNER SERVER - NavFn (more tolerant of occupied start)
 ###############################################################################
 planner_server:
   ros__parameters:
@@ -268,30 +175,18 @@ planner_server:
     use_sim_time: false
     planner_plugins: ["GridBased"]
 
-    # Option 1: Wheelchair A* Planner (from bumperbot, customized)
-    # GridBased:
-    #   plugin: "wheelchair_planning::AStarPlanner"
-    #   interpolation_resolution: 0.1
-
-    # Option 2: Wheelchair Dijkstra Planner (from bumperbot, customized)
-    # GridBased:
-    #   plugin: "wheelchair_planning::DijkstraPlanner"
-    #   interpolation_resolution: 0.1
-
-    # Option 3: NavFn Planner (industry-standard Nav2, RECOMMENDED)
     GridBased:
-      plugin: "nav2_navfn_planner/NavfnPlanner"
-      tolerance: 0.5                # 50cm goal tolerance
-      use_astar: true               # A* algorithm (optimal)
-      allow_unknown: true           # Can plan through unknown space
-      use_final_approach_orientation: false
+      plugin: "nav2_navfn_planner::NavfnPlanner"
+      tolerance: 0.5
+      use_astar: false
+      allow_unknown: true
 
 planner_server_rclcpp_node:
   ros__parameters:
     use_sim_time: false
 
 ###############################################################################
-# SMOOTHER SERVER - Path Smoothing
+# SMOOTHER SERVER
 ###############################################################################
 smoother_server:
   ros__parameters:
@@ -328,7 +223,7 @@ behavior_server:
     transform_tolerance: 0.1
     use_sim_time: false
     simulate_ahead_time: 2.0
-    max_rotational_vel: 0.5        # Slow rotation for recovery
+    max_rotational_vel: 0.5
     min_rotational_vel: 0.2
     rotational_acc_lim: 1.0
 
@@ -337,10 +232,11 @@ behavior_server_rclcpp_node:
     use_sim_time: false
 
 ###############################################################################
-# WAYPOINT FOLLOWER - Multi-goal Navigation
+# WAYPOINT FOLLOWER
 ###############################################################################
 waypoint_follower:
   ros__parameters:
+    use_sim_time: false
     loop_rate: 20
     stop_on_failure: false
     waypoint_task_executor_plugin: "wait_at_waypoint"
@@ -355,65 +251,23 @@ waypoint_follower_rclcpp_node:
     use_sim_time: false
 
 ###############################################################################
-# VELOCITY SMOOTHER - Smooth Velocity Commands
+# VELOCITY SMOOTHER
 ###############################################################################
 velocity_smoother:
   ros__parameters:
     use_sim_time: false
-    smoothing_frequency: 20.0      # 20Hz smoothing
+    smoothing_frequency: 20.0
     scale_velocities: false
     feedback: "OPEN_LOOP"
-    max_velocity: [0.5, 0.0, 0.8]  # [vx, vy, vtheta]
-    min_velocity: [-0.3, 0.0, -0.8]
-    max_accel: [0.3, 0.0, 1.5]     # Gentle acceleration
-    max_decel: [-0.4, 0.0, -2.0]   # Gentle deceleration
+    max_velocity: [0.4, 0.0, 0.8]
+    min_velocity: [-0.2, 0.0, -0.8]
+    max_accel: [0.3, 0.0, 1.5]
+    max_decel: [-0.4, 0.0, -2.0]
     odom_topic: "/odometry/filtered"
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 1.0
 
 velocity_smoother_rclcpp_node:
-  ros__parameters:
-    use_sim_time: false
-
-###############################################################################
-# COLLISION MONITOR - Safety Layer
-###############################################################################
-collision_monitor:
-  ros__parameters:
-    use_sim_time: false
-    base_frame_id: "base_link"
-    odom_frame_id: "odom"
-    cmd_vel_in_topic: "cmd_vel_smoothed"
-    cmd_vel_out_topic: "cmd_vel"
-    state_topic: "collision_monitor_state"
-    transform_tolerance: 0.2
-    source_timeout: 1.0
-    base_shift_correction: true
-    stop_pub_timeout: 2.0
-
-    # Polygons for collision checking
-    polygons: ["FootprintApproach"]
-
-    FootprintApproach:
-      type: "polygon"
-      action_type: "approach"
-      footprint_topic: "/local_costmap/published_footprint"
-      time_before_collision: 2.0
-      simulation_time_step: 0.1
-      min_points: 6
-      visualize: false
-      enabled: true
-
-    observation_sources: ["scan"]
-
-    scan:
-      type: "scan"
-      topic: "/scan"
-      min_height: 0.05
-      max_height: 2.0
-      enabled: true
-
-collision_monitor_rclcpp_node:
   ros__parameters:
     use_sim_time: false

@@ -1,9 +1,56 @@
 # CLAUDE.md - AI Assistant Development Guide
 
-**Last Updated**: 2025-11-20
-**Project**: wc
+**Last Updated**: 2025-11-25
+**Project**: Wheelchair Autonomous Navigation System
 **Repository**: siddharthtiwari1/wc
 **Owner**: Siddharth Tiwari (s24035@students.iitmandi.ac.in)
+
+---
+
+## REFERENCE LEARNING DOCUMENTS
+
+**IMPORTANT**: Before working on navigation, localization, or Nav2 related tasks, review these learning documents:
+
+| Document | Path | Description |
+|----------|------|-------------|
+| **Bumperbot Nav2 Learnings** | [`docs/BUMPERBOT_LEARNINGS.md`](docs/BUMPERBOT_LEARNINGS.md) | Comprehensive Nav2 patterns from bumperbot_ws |
+
+### Source Workspaces for Learning
+- **Bumperbot WS**: `/home/sidd/Downloads/lidartest-20251121T154203Z-1-001/lidartest/src/bumperbot_ws`
+  - Well-structured Nav2 navigation with custom planners (A*, Dijkstra)
+  - Custom controllers (Pure Pursuit, PD Motion)
+  - Safety features, behavior trees, EKF/AMCL localization
+
+---
+
+## CRITICAL ROS2 RULES - ALWAYS FOLLOW
+
+### Before ANY ROS2 Launch
+**ALWAYS** kill all existing ROS2 processes and verify they are dead before launching:
+
+```bash
+# Step 1: Kill all ROS2 processes
+pkill -9 -f ros2; pkill -9 -f rviz; pkill -9 -f gzclient; pkill -9 -f gzserver
+
+# Step 2: Wait for cleanup
+sleep 3
+
+# Step 3: Verify no processes running
+pgrep -a ros2 || echo "Clean - ready to launch"
+
+# Step 4: Check ROS2 topics are cleared
+ros2 topic list 2>/dev/null | wc -l  # Should be 0 or very few
+
+# Step 5: Only then launch
+ros2 launch wheelchair_bringup wheelchair_global_localization.launch.py
+```
+
+**WHY**: USB devices (RealSense, RPLidar, Arduino) get locked by previous processes. Not killing them causes "Device busy" errors.
+
+### Main Launch Files
+- **Localization**: `ros2 launch wheelchair_bringup wheelchair_global_localization.launch.py`
+- **Autonomous Nav**: `ros2 launch wheelchair_bringup wheelchair_autonomous_nav.launch.py`
+- **Default Map**: `/home/sidd/wc/maps/my_map.yaml`
 
 ---
 
@@ -11,47 +58,49 @@
 
 ### What is this project?
 
-This is the **wc** project - currently in the initial development stage. Based on the project name, this appears to be a word count utility implementation (similar to the Unix `wc` command).
+This is the **Wheelchair Autonomous Navigation System** - a ROS2 Jazzy-based autonomous wheelchair with SLAM, localization, and Nav2 navigation.
 
 ### Current Status
 
-**Stage**: Early initialization
-**Branch**: `claude/claude-md-mi6y8g2to5fjphmj-01N6TcZncM17wVYW1FzAFmyc`
-**Latest Commit**: Add initial README with project title (8bd6c23)
+**Stage**: Autonomous Navigation POC
+**Branch**: `main`
+**Working Directory**: `/home/sidd/wc`
 
-The repository currently contains:
-- Basic README.md with project title
-- Git repository structure
-- This CLAUDE.md file (AI assistant guide)
+The system currently has:
+- Working odometry and EKF localization
+- AMCL global localization (needs fine-tuning)
+- Pre-built map at `/home/sidd/wc/maps/my_map.yaml`
+- Full Nav2 navigation stack configured
+
+### Hardware Components
+- **Wheelchair Base**: Custom differential drive with Arduino interface
+- **LIDAR**: RPLidar S3 (360 deg scan on /scan)
+- **Camera**: RealSense D455 (depth + RGB)
+- **IMU**: Internal sensor for orientation
 
 ---
 
 ## Repository Structure
 
 ```
-/home/user/wc/
-├── .git/                    # Git repository metadata
-├── README.md                # Project documentation (minimal)
-├── CLAUDE.md               # This file - AI assistant guide
-└── (additional files to be added)
-```
-
-### Expected Future Structure
-
-As this project develops, expect to see:
-
-```
-/home/user/wc/
-├── src/                    # Source code directory
-│   └── (implementation files)
-├── tests/                  # Test files
-│   └── (test files)
-├── docs/                   # Additional documentation
-├── .gitignore             # Git ignore rules
-├── README.md              # User-facing documentation
-├── CLAUDE.md              # This file
-├── LICENSE                # Project license
-└── (build configuration)  # Language-specific config files
+/home/sidd/wc/
+├── src/
+│   ├── wheelchair_bringup/          # Main launch files
+│   ├── wheelchair_navigation/       # Nav2 configs, behavior trees
+│   ├── wheelchair_localization/     # EKF, AMCL configs
+│   ├── wheelchair_planning/         # Custom planners (A*, Dijkstra)
+│   ├── wheelchair_motion/           # Custom controllers (Pure Pursuit, PD)
+│   ├── wheelchair_description/      # URDF, RViz configs
+│   ├── wheelchair_firmware/         # Arduino hardware interface
+│   └── wc_control/                  # ros2_control configs
+├── maps/                            # Saved maps
+│   └── my_map.yaml                  # Current production map
+├── docs/                            # Documentation
+│   └── BUMPERBOT_LEARNINGS.md       # Nav2 patterns from bumperbot
+├── build/                           # Colcon build output
+├── install/                         # Colcon install output
+├── CLAUDE.md                        # This file
+└── README.md                        # Project documentation
 ```
 
 ---
@@ -251,36 +300,68 @@ Document here:
 
 ## Project-Specific Context
 
-### What "wc" Typically Means
-The Unix `wc` (word count) command counts:
-- Lines (`-l` flag)
-- Words (`-w` flag)
-- Characters (`-c` flag)
-- Bytes (`-c` flag)
-- Max line length (`-L` flag)
+### What "wc" Means Here
+**WC = WheelChair** - This is an autonomous wheelchair navigation project, NOT the Unix word count utility.
 
-If this project is implementing a similar utility, consider:
-- Multiple input sources (stdin, files)
-- Multiple counting modes
-- Efficient processing of large files
-- POSIX compatibility (if applicable)
-- Edge cases (empty files, binary files, etc.)
+### System Architecture
 
-### Design Considerations
-- **Performance**: Should handle large files efficiently
-- **Correctness**: Define what counts as a "word" or "line"
-- **Compatibility**: Match Unix wc behavior or define differences
-- **Error Handling**: Graceful handling of missing/unreadable files
-- **Testing**: Comprehensive test cases for edge cases
+```
+                    ┌─────────────────────────────────────────────────────┐
+                    │            WHEELCHAIR AUTONOMOUS NAV                │
+                    └─────────────────────────────────────────────────────┘
+                                           │
+           ┌───────────────────────────────┼───────────────────────────────┐
+           │                               │                               │
+    ┌──────▼──────┐               ┌────────▼────────┐             ┌────────▼────────┐
+    │   SENSORS   │               │   LOCALIZATION  │             │   NAVIGATION    │
+    └──────┬──────┘               └────────┬────────┘             └────────┬────────┘
+           │                               │                               │
+    ┌──────┴──────┐               ┌────────┴────────┐             ┌────────┴────────┐
+    │ RPLidar S3  │               │ EKF (odom+IMU)  │             │ Nav2 Stack      │
+    │ /scan       │               │ /odometry/filt. │             │ - Controller    │
+    ├─────────────┤               ├─────────────────┤             │ - Planner       │
+    │ RealSense   │               │ AMCL (map loc)  │             │ - BT Navigator  │
+    │ /camera/*   │               │ map→odom TF     │             │ - Behaviors     │
+    ├─────────────┤               └─────────────────┘             └─────────────────┘
+    │ Wheel Odom  │                       │                               │
+    │ /wc_control │                       │                               │
+    └─────────────┘                       └───────────────┬───────────────┘
+                                                          │
+                                                   ┌──────▼──────┐
+                                                   │  /cmd_vel   │
+                                                   └──────┬──────┘
+                                                          │
+                                                   ┌──────▼──────┐
+                                                   │   Arduino   │
+                                                   │ Motor Ctrl  │
+                                                   └─────────────┘
+```
+
+### Key Topics
+| Topic | Type | Description |
+|-------|------|-------------|
+| `/scan` | LaserScan | RPLidar S3 360° scan |
+| `/odometry/filtered` | Odometry | EKF fused odometry |
+| `/map` | OccupancyGrid | Static map from map_server |
+| `/cmd_vel` | Twist | Navigation velocity commands |
+| `/wc_control/cmd_vel` | Twist | Arduino motor interface |
+
+### TF Tree
+```
+map → odom → base_link → base_laser → rplidar_link
+                │
+                └→ camera_link → camera_depth_frame
+```
 
 ---
 
 ## Environment Information
 
 **Platform**: Linux
-**OS Version**: Linux 4.4.0
+**OS Version**: Linux 6.14.0 (Ubuntu)
+**ROS2 Version**: Jazzy
 **Git Repository**: Yes
-**Working Directory**: `/home/user/wc`
+**Working Directory**: `/home/sidd/wc`
 
 ---
 
@@ -334,23 +415,73 @@ This CLAUDE.md should be updated when:
 ## Additional Resources
 
 ### Internal Documentation
-- [README.md](README.md) - User-facing documentation
+- [README.md](README.md) - Project overview
+- [docs/BUMPERBOT_LEARNINGS.md](docs/BUMPERBOT_LEARNINGS.md) - Nav2 patterns and configurations
 
 ### External Resources
-- Unix wc manual: `man wc`
-- POSIX wc specification: [POSIX.1-2017](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/wc.html)
+- Nav2 Documentation: https://navigation.ros.org/
+- ROS2 Jazzy Docs: https://docs.ros.org/en/jazzy/
+- robot_localization Wiki: http://docs.ros.org/en/melodic/api/robot_localization/html/
+
+---
+
+## Quick Reference Commands
+
+### Launch System
+```bash
+# Kill all ROS2 processes first
+pkill -9 -f ros2; pkill -9 -f rviz; sleep 3
+
+# Localization only
+ros2 launch wheelchair_bringup wheelchair_global_localization.launch.py
+
+# Full autonomous navigation
+ros2 launch wheelchair_bringup wheelchair_autonomous_nav.launch.py
+```
+
+### Debugging
+```bash
+# Check TF tree
+ros2 run tf2_tools view_frames
+
+# Check Nav2 lifecycle states
+ros2 lifecycle get /controller_server
+ros2 lifecycle get /planner_server
+
+# Check costmaps updating
+ros2 topic hz /local_costmap/costmap
+ros2 topic hz /global_costmap/costmap
+
+# Send test navigation goal
+ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
+  "{pose: {header: {frame_id: 'map'}, pose: {position: {x: 1.0, y: 0.5}, orientation: {w: 1.0}}}}"
+```
+
+### Building
+```bash
+cd /home/sidd/wc
+source /opt/ros/jazzy/setup.bash
+colcon build --symlink-install
+source install/setup.bash
+```
 
 ---
 
 ## Notes for Future Development
 
-This section should be updated as the project evolves:
+### Current Priorities
+1. Fine-tune AMCL localization accuracy
+2. Test autonomous navigation POC end-to-end
+3. Add safety features (collision monitor, safety stop)
 
-- **Architecture Decisions**: Document major design choices
-- **Known Issues**: Track known bugs or limitations
-- **Performance Benchmarks**: Record performance metrics
-- **Breaking Changes**: Track API/behavior changes
-- **Migration Guides**: Help for updating to new versions
+### Known Issues
+- AMCL localization needs tuning for better accuracy
+- Depth camera not yet integrated into costmaps
+
+### Architecture Decisions
+- Using Regulated Pure Pursuit controller for smooth wheelchair motion
+- SMAC Planner 2D for efficient path planning
+- Velocity smoother for passenger comfort
 
 ---
 

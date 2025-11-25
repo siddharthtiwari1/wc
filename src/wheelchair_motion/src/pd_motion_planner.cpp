@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 
 #include "nav2_util/node_utils.hpp"
 #include "tf2/utils.h"
@@ -15,6 +16,9 @@ void PDMotionPlanner::configure(
   node_ = parent;
 
   auto node = node_.lock();
+  if (!node) {
+    throw std::runtime_error("Failed to lock node in PDMotionPlanner::configure");
+  }
 
   costmap_ros_ = costmap_ros;
   tf_buffer_ = tf_buffer;
@@ -22,29 +26,57 @@ void PDMotionPlanner::configure(
   logger_ = node->get_logger();
   clock_ = node->get_clock();
 
+  // PD gains - tuned for wheelchair stability
   nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".kp",
+    node, plugin_name_ + ".kp_linear",
+    rclcpp::ParameterValue(1.5));
+  nav2_util::declare_parameter_if_not_declared(
+    node, plugin_name_ + ".kd_linear",
+    rclcpp::ParameterValue(0.1));
+  nav2_util::declare_parameter_if_not_declared(
+    node, plugin_name_ + ".kp_angular",
     rclcpp::ParameterValue(2.0));
   nav2_util::declare_parameter_if_not_declared(
-    node, plugin_name_ + ".kd",
+    node, plugin_name_ + ".kd_angular",
     rclcpp::ParameterValue(0.1));
   nav2_util::declare_parameter_if_not_declared(
     node, plugin_name_ + ".max_linear_velocity",
-    rclcpp::ParameterValue(0.3));
+    rclcpp::ParameterValue(0.3));  // Wheelchair safe speed
+  nav2_util::declare_parameter_if_not_declared(
+    node, plugin_name_ + ".min_linear_velocity",
+    rclcpp::ParameterValue(0.05));
   nav2_util::declare_parameter_if_not_declared(
     node, plugin_name_ + ".max_angular_velocity",
-    rclcpp::ParameterValue(1.0));
+    rclcpp::ParameterValue(0.8));  // Comfortable rotation
   nav2_util::declare_parameter_if_not_declared(
     node, plugin_name_ + ".step_size",
+    rclcpp::ParameterValue(0.3));
+  nav2_util::declare_parameter_if_not_declared(
+    node, plugin_name_ + ".approach_velocity_scaling_dist",
+    rclcpp::ParameterValue(0.8));
+  nav2_util::declare_parameter_if_not_declared(
+    node, plugin_name_ + ".transform_tolerance",
     rclcpp::ParameterValue(0.2));
 
-  node->get_parameter(plugin_name_ + ".kp", kp_);
-  node->get_parameter(plugin_name_ + ".kd", kd_);
+  node->get_parameter(plugin_name_ + ".kp_linear", kp_linear_);
+  node->get_parameter(plugin_name_ + ".kd_linear", kd_linear_);
+  node->get_parameter(plugin_name_ + ".kp_angular", kp_angular_);
+  node->get_parameter(plugin_name_ + ".kd_angular", kd_angular_);
   node->get_parameter(plugin_name_ + ".max_linear_velocity", max_linear_velocity_);
+  node->get_parameter(plugin_name_ + ".min_linear_velocity", min_linear_velocity_);
   node->get_parameter(plugin_name_ + ".max_angular_velocity", max_angular_velocity_);
   node->get_parameter(plugin_name_ + ".step_size", step_size_);
+  node->get_parameter(plugin_name_ + ".approach_velocity_scaling_dist", approach_velocity_scaling_dist_);
+  node->get_parameter(plugin_name_ + ".transform_tolerance", transform_tolerance_);
+
+  // Initialize error tracking
+  prev_angular_error_ = 0.0;
+  prev_linear_error_ = 0.0;
 
   next_pose_pub_ = node->create_publisher<geometry_msgs::msg::PoseStamped>("pd/next_pose", 1);
+
+  RCLCPP_INFO(logger_, "PDMotionPlanner configured with: kp_lin=%.2f, kd_lin=%.2f, kp_ang=%.2f, kd_ang=%.2f",
+    kp_linear_, kd_linear_, kp_angular_, kd_angular_);
 }
 
 void PDMotionPlanner::cleanup()
@@ -75,39 +107,62 @@ geometry_msgs::msg::TwistStamped PDMotionPlanner::computeVelocityCommands(
   auto node = node_.lock();
   geometry_msgs::msg::TwistStamped cmd_vel;
   cmd_vel.header.frame_id = robot_pose.header.frame_id;
+  cmd_vel.header.stamp = clock_->now();
 
-  if(global_plan_.poses.empty()){
-    RCLCPP_ERROR(logger_, "Empty Plan!");
+  if (global_plan_.poses.empty()) {
+    RCLCPP_ERROR(logger_, "PDMotionPlanner: Empty Plan!");
     return cmd_vel;
   }
 
-  if(!transformPlan(robot_pose.header.frame_id)){
-    RCLCPP_ERROR(logger_, "Unable to transform Plan in robot's frame");
+  if (!transformPlan(robot_pose.header.frame_id)) {
+    RCLCPP_ERROR(logger_, "PDMotionPlanner: Unable to transform Plan to robot's frame");
     return cmd_vel;
   }
 
   auto next_pose = getNextPose(robot_pose);
   next_pose_pub_->publish(next_pose);
-        
-  // Calculate the PDMotionPlanner command
+
+  // Calculate the PD command
   tf2::Transform next_pose_robot_tf, robot_tf, next_pose_tf;
   tf2::fromMsg(robot_pose.pose, robot_tf);
   tf2::fromMsg(next_pose.pose, next_pose_tf);
   next_pose_robot_tf = robot_tf.inverse() * next_pose_tf;
 
   double dt = (node->get_clock()->now() - last_cycle_time_).seconds();
+  if (dt <= 0.0 || dt > 1.0) {
+    // Invalid dt, use default
+    dt = 0.05;
+  }
 
   double angular_error = next_pose_robot_tf.getOrigin().getY();
   double angular_error_derivative = (angular_error - prev_angular_error_) / dt;
   double linear_error = next_pose_robot_tf.getOrigin().getX();
   double linear_error_derivative = (linear_error - prev_linear_error_) / dt;
 
-  cmd_vel.header.stamp = clock_->now();
-  cmd_vel.twist.angular.z = std::clamp(kp_ * angular_error + kd_ * angular_error_derivative,
-      -max_angular_velocity_, max_angular_velocity_);
-  cmd_vel.twist.linear.x = std::clamp(kp_ * linear_error + kd_ * linear_error_derivative,
-      -max_linear_velocity_, max_linear_velocity_);
-  
+  // Calculate distance to goal for approach scaling
+  double dist_to_goal = getDistanceToGoal(robot_pose);
+
+  // PD control with separate gains for linear and angular
+  double angular_cmd = kp_angular_ * angular_error + kd_angular_ * angular_error_derivative;
+  double linear_cmd = kp_linear_ * linear_error + kd_linear_ * linear_error_derivative;
+
+  // Apply approach velocity scaling
+  double velocity_scale = 1.0;
+  if (dist_to_goal < approach_velocity_scaling_dist_) {
+    velocity_scale = std::max(0.3, dist_to_goal / approach_velocity_scaling_dist_);
+  }
+
+  // Only move forward, don't reverse unless necessary
+  linear_cmd = std::max(0.0, linear_cmd) * velocity_scale;
+
+  // Reduce linear velocity on tight turns (wheelchair comfort)
+  if (std::abs(angular_cmd) > 0.3) {
+    linear_cmd *= 0.7;
+  }
+
+  cmd_vel.twist.angular.z = std::clamp(angular_cmd, -max_angular_velocity_, max_angular_velocity_);
+  cmd_vel.twist.linear.x = std::clamp(linear_cmd, min_linear_velocity_, max_linear_velocity_);
+
   last_cycle_time_ = node->get_clock()->now();
   prev_angular_error_ = angular_error;
   prev_linear_error_ = linear_error;
@@ -128,14 +183,25 @@ geometry_msgs::msg::PoseStamped PDMotionPlanner::getNextPose(const geometry_msgs
   for (auto pose_it = global_plan_.poses.rbegin(); pose_it != global_plan_.poses.rend(); ++pose_it) {
     double dx = pose_it->pose.position.x - robot_pose.pose.position.x;
     double dy = pose_it->pose.position.y - robot_pose.pose.position.y;
-    double distance = std::sqrt(dx * dx + dy * dy);
-    if(distance > step_size_){
+    double distance = std::hypot(dx, dy);
+    if (distance > step_size_) {
       next_pose = *pose_it;
     } else {
       break;
     }
   }
   return next_pose;
+}
+
+double PDMotionPlanner::getDistanceToGoal(const geometry_msgs::msg::PoseStamped & robot_pose)
+{
+  if (global_plan_.poses.empty()) {
+    return 0.0;
+  }
+  const auto & goal = global_plan_.poses.back();
+  double dx = goal.pose.position.x - robot_pose.pose.position.x;
+  double dy = goal.pose.position.y - robot_pose.pose.position.y;
+  return std::hypot(dx, dy);
 }
 
 bool PDMotionPlanner::transformPlan(const std::string & frame)

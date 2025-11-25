@@ -8,19 +8,26 @@ Launches Nav2 navigation stack for autonomous wheelchair navigation.
 Based on robust bumperbot_ws navigation architecture.
 
 Components:
-- Controller Server (DWB local planner)
-- Planner Server (NavFn global planner)
+- Controller Server (DWB/Pure Pursuit/PD Motion controller)
+- Planner Server (NavFn/Dijkstra/A* global planner)
 - Behavior Server (recovery behaviors)
-- BT Navigator (behavior tree executive)
+- BT Navigator (behavior tree executive with full recovery)
 - Smoother Server (path smoothing)
 - Velocity Smoother (smooth velocity commands)
 - Collision Monitor (safety layer)
 - Waypoint Follower (multi-goal navigation)
 - Lifecycle Manager (node management)
 
+Custom Plugins Available:
+- Planners: wheelchair_planning::DijkstraPlanner, wheelchair_planning::AStarPlanner
+- Controllers: wheelchair_motion::PurePursuit, wheelchair_motion::PDMotionPlanner
+
 Usage:
     With existing map (localization mode):
         ros2 launch wheelchair_navigation navigation.launch.py use_sim_time:=false
+
+    With custom behavior tree:
+        ros2 launch wheelchair_navigation navigation.launch.py bt_xml:=/path/to/bt.xml
 
     With simulation:
         ros2 launch wheelchair_navigation navigation.launch.py use_sim_time:=true
@@ -35,7 +42,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, TimerAction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -52,6 +59,13 @@ def generate_launch_description():
         wheelchair_navigation_pkg,
         'config',
         'nav2_params_wheelchair.yaml'
+    )
+
+    # Default behavior tree with full recovery
+    default_bt_xml = os.path.join(
+        wheelchair_navigation_pkg,
+        'behavior_tree',
+        'wheelchair_navigation_w_replanning_and_recovery.xml'
     )
 
     # Lifecycle nodes managed by lifecycle_manager
@@ -88,6 +102,12 @@ def generate_launch_description():
         description='Automatically startup the nav2 stack'
     )
 
+    declare_bt_xml = DeclareLaunchArgument(
+        'bt_xml',
+        default_value=default_bt_xml,
+        description='Full path to behavior tree XML file'
+    )
+
     # ========================================================================
     # NAV2 NODES
     # ========================================================================
@@ -122,13 +142,16 @@ def generate_launch_description():
         parameters=[LaunchConfiguration('params_file')]
     )
 
-    # BT Navigator - Behavior tree based navigation executive
+    # BT Navigator - Behavior tree based navigation executive with full recovery
     bt_navigator = Node(
         package='nav2_bt_navigator',
         executable='bt_navigator',
         name='bt_navigator',
         output='screen',
-        parameters=[LaunchConfiguration('params_file')]
+        parameters=[
+            LaunchConfiguration('params_file'),
+            {'default_nav_to_pose_bt_xml': LaunchConfiguration('bt_xml')}
+        ]
     )
 
     # Smoother Server - Path smoothing for better trajectories
@@ -193,6 +216,7 @@ def generate_launch_description():
         declare_use_sim_time,
         declare_params_file,
         declare_autostart,
+        declare_bt_xml,
 
         # Nav2 nodes
         controller_server,

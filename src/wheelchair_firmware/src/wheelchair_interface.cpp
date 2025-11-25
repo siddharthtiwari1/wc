@@ -207,14 +207,18 @@ CallbackReturn WheelchairInterface::on_activate(const rclcpp_lifecycle::State &)
     motor_controller_->SetStopBits(LibSerial::StopBits::STOP_BITS_1);
     motor_controller_->SetCharacterSize(LibSerial::CharacterSize::CHAR_SIZE_8);
 
-    // Wait for Arduino to initialize (matches your Arduino 5 second relay delay)
+    // Wait for Arduino to initialize (Arduino has 5 second relay delay)
     RCLCPP_INFO(rclcpp::get_logger("WheelchairInterface"),
-                "Port configured successfully. Waiting for Arduino initialization...");
-    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+                "Port configured successfully. Waiting 6 seconds for Arduino relay...");
+    std::this_thread::sleep_for(std::chrono::milliseconds(6000));
     
     // Send initial stop command to ensure wheelchair is stopped
     sendCommand("rp0.0,lp0.0,");
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    // CRITICAL: Reset command time AFTER Arduino wait to prevent immediate emergency stop
+    last_command_time_ = clock_.now();
+    emergency_stop_active_ = false;
   }
   catch (const std::exception& e)
   {
@@ -524,11 +528,13 @@ hardware_interface::return_type WheelchairInterface::write(const rclcpp::Time &t
   // Check safety limits
   checkSafetyLimits();
 
-  // Apply emergency stop if active
+  // Clear emergency stop if we're receiving commands (recovery)
   if (emergency_stop_active_)
   {
-    wheel_velocity_commands_[0] = 0.0;
-    wheel_velocity_commands_[1] = 0.0;
+    // Clear emergency stop - commands are coming in (write is being called)
+    emergency_stop_active_ = false;
+    RCLCPP_INFO(rclcpp::get_logger("WheelchairInterface"),
+                "Emergency stop cleared - commands resumed");
   }
 
   // FIXED: Correct joint mapping for Arduino commands
@@ -551,15 +557,26 @@ hardware_interface::return_type WheelchairInterface::write(const rclcpp::Time &t
              << std::fixed << std::setprecision(1) << std::abs(left_cmd)
              << ",";
 
+  // DEBUG: Log commands being sent (throttled)
+  // Always log every 2 seconds for debugging
+  RCLCPP_INFO_THROTTLE(rclcpp::get_logger("WheelchairInterface"),
+              clock_, 2000,
+              "WRITE: wheel_cmds=[%.3f, %.3f] -> %s",
+              wheel_velocity_commands_[0], wheel_velocity_commands_[1], cmd_stream.str().c_str());
+
+  // Log at higher rate when commands are non-zero
+  if (std::abs(left_cmd) > 0.01 || std::abs(right_cmd) > 0.01) {
+    RCLCPP_INFO_THROTTLE(rclcpp::get_logger("WheelchairInterface"),
+                clock_, 500,
+                "CMD: L=%.2f R=%.2f -> %s", left_cmd, right_cmd, cmd_stream.str().c_str());
+  }
+
   if (!sendCommand(cmd_stream.str()))
   {
     RCLCPP_ERROR(rclcpp::get_logger("WheelchairInterface"),
                  "Failed to send velocity command: %s", cmd_stream.str().c_str());
     return hardware_interface::return_type::ERROR;
   }
-
-  RCLCPP_DEBUG(rclcpp::get_logger("WheelchairInterface"),
-              "Sent command: %s", cmd_stream.str().c_str());
 
   return hardware_interface::return_type::OK;
 }

@@ -1,0 +1,154 @@
+# ============================================================================
+# AMCL S3 ULTIMATE - MAXIMUM PERFORMANCE + NOISE RESILIENCE
+# ============================================================================
+# The BEST config combining:
+#   1. Maximum RPLidar S3 utilization (500 beams)
+#   2. Ultra-responsive tracking (V2 style)
+#   3. Noise resilience for cluttered environments
+#
+# Use this for: Best overall performance in real-world conditions
+# ============================================================================
+
+amcl:
+  ros__parameters:
+    use_sim_time: false
+
+    # =========================================================================
+    # FRAME CONFIGURATION
+    # =========================================================================
+    global_frame_id: "map"
+    odom_frame_id: "odom"
+    base_frame_id: "base_link"
+
+    tf_broadcast: true
+    transform_tolerance: 0.08           # 80ms - fast but stable
+
+    # =========================================================================
+    # UPDATE THRESHOLDS - ULTRA RESPONSIVE
+    # =========================================================================
+    update_min_d: 0.015                 # 1.5cm translation
+    update_min_a: 0.04                  # ~2.3° rotation
+
+    # =========================================================================
+    # PARTICLE FILTER - MAXIMUM ROBUSTNESS
+    # =========================================================================
+    min_particles: 2500
+    max_particles: 10000                # High for large/complex spaces
+
+    kld_err: 0.008
+    kld_z: 0.99
+
+    resample_interval: 1
+    selective_resampling: false
+
+    # =========================================================================
+    # RPLIDAR S3 - MAXIMUM UTILIZATION
+    # =========================================================================
+    scan_topic: scan
+    laser_model_type: "likelihood_field"
+
+    laser_max_range: 20.0
+    laser_min_range: 0.10
+
+    # 500 beams = 15.6% of S3's data - optimal for accuracy vs CPU
+    max_beams: 500
+
+    # =========================================================================
+    # LIKELIHOOD FIELD - BALANCED
+    # =========================================================================
+    laser_likelihood_max_dist: 1.8
+    sigma_hit: 0.10                     # 10cm - good balance
+
+    # =========================================================================
+    # SENSOR MODEL - HIGH TRUST WITH NOISE TOLERANCE
+    # =========================================================================
+    z_hit: 0.88                         # 88% trust hits
+    z_rand: 0.08                        # 8% random tolerance
+    z_max: 0.02
+    z_short: 0.02
+
+    lambda_short: 0.1
+
+    # =========================================================================
+    # BEAM SKIP - ENABLED FOR ROBUSTNESS
+    # =========================================================================
+    do_beamskip: true
+    beam_skip_distance: 0.45
+    beam_skip_error_threshold: 0.85
+    beam_skip_threshold: 0.25           # 25% skip allowed
+
+    # =========================================================================
+    # MOTION MODEL - LOW NOISE (trust EKF)
+    # =========================================================================
+    robot_model_type: "nav2_amcl::DifferentialMotionModel"
+
+    alpha1: 0.05
+    alpha2: 0.05
+    alpha3: 0.10
+    alpha4: 0.05
+    alpha5: 0.05
+
+    # =========================================================================
+    # INITIAL POSE
+    # =========================================================================
+    set_initial_pose: true
+
+    initial_pose:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      yaw: 0.0
+
+    initial_cov_xx: 0.15
+    initial_cov_yy: 0.15
+    initial_cov_aa: 0.18
+    initial_cov_xy: 0.0
+    initial_cov_xa: 0.0
+    initial_cov_ya: 0.0
+
+    # =========================================================================
+    # RECOVERY - AGGRESSIVE
+    # =========================================================================
+    recovery_alpha_slow: 0.0001
+    recovery_alpha_fast: 0.12
+
+    # =========================================================================
+    # LOCALIZATION QUALITY
+    # =========================================================================
+    pf_err: 0.02
+    pf_z: 0.99
+
+    save_pose_rate: 5.0
+
+    # =========================================================================
+    # HIGH RESOLUTION
+    # =========================================================================
+    spatial_resolution_x: 0.025
+    spatial_resolution_y: 0.025
+    spatial_resolution_theta: 0.035
+
+    always_reset_initial_pose: false
+    first_map_only: false
+
+    gui_publish_rate: 15.0
+
+    # =========================================================================
+    # ADVANCED
+    # =========================================================================
+    laser_scan_timeout: 0.4
+    random_seed: -1
+    use_quaternion: true
+
+# ============================================================================
+# SUMMARY
+# ============================================================================
+#
+# This is the RECOMMENDED config for real-world use:
+#   - 500 beams (max S3 utilization)
+#   - 10000 particles (handles complex environments)
+#   - Beam skip ON (handles dynamic objects + map noise)
+#   - Fast updates (1.5cm, 2.3°)
+#   - Aggressive recovery
+#
+# Expected: ~50-60% CPU, excellent localization stability
+# ============================================================================

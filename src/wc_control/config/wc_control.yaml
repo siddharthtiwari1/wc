@@ -21,9 +21,13 @@ wc_control:
     # Joint names - FIXED to use leftwheel/rightwheel
     left_wheel_names: ['leftwheel']
     right_wheel_names: ['rightwheel']
-    
+
     # Use stamped velocity commands (TwistStamped)
     use_stamped_vel: true
+
+    # CRITICAL: Open loop mode - send commands without velocity feedback
+    open_loop: true
+    velocity_rolling_window_size: 1
     
     # Publish rates and covariances
     publish_rate: 50.0

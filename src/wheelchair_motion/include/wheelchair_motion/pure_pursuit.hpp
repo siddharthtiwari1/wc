@@ -47,7 +47,11 @@ public:
   void setSpeedLimit(const double & speed_limit, const bool & percentage) override;
 
 protected:
-  geometry_msgs::msg::PoseStamped getCarrotPose(const geometry_msgs::msg::PoseStamped & robot_pose);
+  geometry_msgs::msg::PoseStamped getCarrotPose(
+    const geometry_msgs::msg::PoseStamped & robot_pose,
+    double lookahead_dist);
+
+  double getDistanceToGoal(const geometry_msgs::msg::PoseStamped & robot_pose);
 
   bool transformPlan(const std::string & frame);
 
@@ -61,9 +65,16 @@ protected:
   rclcpp::Logger logger_ {rclcpp::get_logger("PurePursuit")};
   rclcpp::Clock::SharedPtr clock_;
 
+  // Wheelchair-safe parameters
   double look_ahead_distance_;
+  double min_look_ahead_distance_;
+  double max_look_ahead_distance_;
   double max_linear_velocity_;
+  double min_linear_velocity_;
   double max_angular_velocity_;
+  double approach_velocity_scaling_dist_;
+  bool use_velocity_scaled_lookahead_;
+  double transform_tolerance_;
 
   nav_msgs::msg::Path global_plan_;
 };

@@ -1,1 +1,26 @@
 __pycache__/
+*.pyc
+*.pyo
+
+# ROS2 build artifacts
+build/
+install/
+log/
+
+# LaTeX auxiliary files
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+
+# CSV data logs
+*.csv
+
+# Temporary/backup files
+*.backup
+*_BACKUP.*
+
+# IDE
+.vscode/
+.idea/

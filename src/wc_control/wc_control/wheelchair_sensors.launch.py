@@ -131,6 +131,7 @@ def generate_launch_description():
             'rgb_camera.profile': '640x360x30',
             'depth_module.profile': '640x360x30',
             'use_sim_time': LaunchConfiguration('use_sim_time'),
+            'publish_tf': 'false',  # CRITICAL: Disable RealSense TF - wheelchair URDF handles all TF
         }.items(),
     )
 
@@ -164,6 +165,24 @@ def generate_launch_description():
         }],
     )
 
+    # Depth to PointCloud2 conversion for Nav2 costmaps
+    # Uses depth_image_proc to convert aligned depth images to point clouds
+    depth_to_pointcloud = Node(
+        package='depth_image_proc',
+        executable='point_cloud_xyzrgb_node',
+        name='depth_to_pointcloud',
+        output='screen',
+        parameters=[{
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
+        }],
+        remappings=[
+            ('rgb/camera_info', '/camera/aligned_depth_to_color/camera_info'),
+            ('rgb/image_rect_color', '/camera/color/image_raw'),
+            ('depth_registered/image_rect', '/camera/aligned_depth_to_color/image_raw'),
+            ('points', '/camera/depth/points'),
+        ],
+    )
+
     rviz_node = Node(
         package='rviz2',
         executable='rviz2',
@@ -187,5 +206,6 @@ def generate_launch_description():
         realsense_launch,
         imu_filter,
         imu_wheelchair_republisher,
+        depth_to_pointcloud,
         rviz_node,
     ])

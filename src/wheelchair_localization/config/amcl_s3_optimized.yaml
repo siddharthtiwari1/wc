@@ -1,0 +1,186 @@
+# ============================================================================
+# AMCL S3 OPTIMIZED - MAX S3 POTENTIAL + NOISE HANDLING
+# ============================================================================
+# Combines:
+#   1. Maximum RPLidar S3 utilization (500 beams = 15.6% of S3's data)
+#   2. Noise handling for cluttered/imperfect maps
+#
+# RPLidar S3 Specs:
+#   - Range: 0.1m - 40m
+#   - Points: 3200/scan @ 10Hz
+#   - Angular Resolution: 0.1125°
+#   - Accuracy: ±3cm @ 10m
+#
+# Noise Handling Strategy:
+#   - Beam skip enabled (ignores beams that don't match - dynamic objects)
+#   - Moderate sigma_hit (tolerant of map imperfections)
+#   - Balanced z_hit/z_rand (some random tolerance for noise)
+#   - Good recovery parameters (recovers from localization loss)
+# ============================================================================
+
+amcl:
+  ros__parameters:
+    use_sim_time: false
+
+    # =========================================================================
+    # FRAME CONFIGURATION
+    # =========================================================================
+    global_frame_id: "map"
+    odom_frame_id: "odom"
+    base_frame_id: "base_link"
+
+    tf_broadcast: true
+    transform_tolerance: 0.1            # 100ms - responsive but stable
+
+    # =========================================================================
+    # UPDATE THRESHOLDS - RESPONSIVE
+    # =========================================================================
+    update_min_d: 0.02                  # 2cm translation
+    update_min_a: 0.05                  # ~2.9° rotation
+
+    # =========================================================================
+    # PARTICLE FILTER - HIGH ROBUSTNESS
+    # =========================================================================
+    min_particles: 2000
+    max_particles: 8000
+
+    kld_err: 0.01
+    kld_z: 0.99
+
+    resample_interval: 1
+    selective_resampling: false
+
+    # =========================================================================
+    # RPLIDAR S3 - MAXIMUM UTILIZATION
+    # =========================================================================
+    scan_topic: scan
+    laser_model_type: "likelihood_field"
+
+    # Range - indoor optimized
+    laser_max_range: 20.0               # Good indoor range (not full 40m)
+    laser_min_range: 0.10               # S3's true minimum
+
+    # =========================================================================
+    # MAX_BEAMS: S3 OPTIMIZATION
+    # =========================================================================
+    # S3 gives 3200 points/scan
+    # 500 beams = 15.6% utilization - excellent for i5 13th Gen
+    max_beams: 500
+
+    # =========================================================================
+    # LIKELIHOOD FIELD - BALANCED FOR NOISY MAPS
+    # =========================================================================
+    # Not too tight (handles map imperfections)
+    # Not too loose (still accurate)
+    laser_likelihood_max_dist: 2.0      # 2m search distance
+    sigma_hit: 0.12                     # 12cm sigma (tolerant of noise)
+
+    # =========================================================================
+    # SENSOR MODEL - BALANCED FOR CLUTTER
+    # =========================================================================
+    # Trust S3 but allow for some noise/dynamic objects
+    z_hit: 0.85                         # 85% trust hits
+    z_rand: 0.10                        # 10% random (handles noise)
+    z_max: 0.025                        # 2.5% max range
+    z_short: 0.025                      # 2.5% short readings (dynamic objects)
+
+    lambda_short: 0.1
+
+    # =========================================================================
+    # BEAM SKIP - CRITICAL FOR CLUTTERED ENVIRONMENTS!
+    # =========================================================================
+    # Ignores beams that don't match (people, moved furniture, map noise)
+    do_beamskip: true
+    beam_skip_distance: 0.5             # Skip if error > 50cm
+    beam_skip_error_threshold: 0.85     # Skip if >85% beams have large error
+    beam_skip_threshold: 0.30           # Allow up to 30% beams to be skipped
+
+    # =========================================================================
+    # MOTION MODEL - TRUST ODOMETRY
+    # =========================================================================
+    robot_model_type: "nav2_amcl::DifferentialMotionModel"
+
+    # Moderate noise values (your EKF is good but not perfect)
+    alpha1: 0.10                        # Rot from rot
+    alpha2: 0.10                        # Rot from trans
+    alpha3: 0.12                        # Trans from trans (wheel slip)
+    alpha4: 0.10                        # Trans from rot
+    alpha5: 0.10                        # Trans noise
+
+    # =========================================================================
+    # INITIAL POSE
+    # =========================================================================
+    set_initial_pose: true
+
+    initial_pose:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      yaw: 0.0
+
+    # Wider initial uncertainty (handles noisy map)
+    initial_cov_xx: 0.20                # ±45cm X
+    initial_cov_yy: 0.20                # ±45cm Y
+    initial_cov_aa: 0.20                # ±26° yaw
+    initial_cov_xy: 0.0
+    initial_cov_xa: 0.0
+    initial_cov_ya: 0.0
+
+    # =========================================================================
+    # RECOVERY - ROBUST
+    # =========================================================================
+    recovery_alpha_slow: 0.001          # Slow long-term average
+    recovery_alpha_fast: 0.1            # Quick detection of problems
+
+    # =========================================================================
+    # LOCALIZATION QUALITY
+    # =========================================================================
+    pf_err: 0.03                        # 3% target error (realistic for noisy map)
+    pf_z: 0.99
+
+    save_pose_rate: 5.0                 # 5Hz for Nav2
+
+    # =========================================================================
+    # SPATIAL RESOLUTION
+    # =========================================================================
+    spatial_resolution_x: 0.03          # 3cm grid
+    spatial_resolution_y: 0.03
+    spatial_resolution_theta: 0.04      # ~2.3°
+
+    always_reset_initial_pose: false
+    first_map_only: false
+
+    gui_publish_rate: 10.0              # 10Hz particle cloud
+
+    # =========================================================================
+    # ADVANCED
+    # =========================================================================
+    laser_scan_timeout: 0.5
+    random_seed: -1
+    use_quaternion: true
+
+# ============================================================================
+# CONFIGURATION PHILOSOPHY
+# ============================================================================
+#
+# S3 MAXIMIZATION:
+#   ✓ 500 beams (15.6% of S3's 3200 points)
+#   ✓ 20m range (50% of S3's 40m - good for indoor)
+#   ✓ 2cm update threshold (responsive)
+#   ✓ 8000 max particles (leverages CPU)
+#
+# NOISE HANDLING:
+#   ✓ Beam skip enabled (ignores mismatched beams)
+#   ✓ 12cm sigma_hit (tolerant of map noise)
+#   ✓ 10% z_rand (allows for random noise)
+#   ✓ 30% beam skip threshold (handles dynamic objects)
+#   ✓ Moderate alpha values (balanced odom trust)
+#   ✓ Wider initial covariance (handles uncertainty)
+#
+# EXPECTED RESULTS:
+#   - Stable localization even with noisy map
+#   - Handles dynamic objects (people walking)
+#   - Good recovery from localization loss
+#   - ~40-50% CPU usage
+#
+# ============================================================================

@@ -14,15 +14,23 @@ setup(
             # EKF sensor fusion configs
             'config/ekf.yaml',
             'config/ekf_global.yaml',
+            # VIO configs (Visual-Inertial-Encoder Odometry)
+            'config/ekf_vo_imu.yaml',
+            'config/ekf_vio_complete.yaml',
             # SLAM Toolbox mapping config (PRODUCTION - SOURCE CODE VERIFIED)
             'config/slam_toolbox_v14r25_FINAL.yaml',
             # AMCL localization configs
             'config/amcl.yaml',
+            'config/amcl_v1.yaml',
+            'config/amcl_v2.yaml',
+            'config/amcl_s3_optimized.yaml',
+            'config/amcl_s3_ultimate.yaml',
         ]),
         ('share/' + package_name + '/launch', [
             'launch/local_localization.launch.py',
             'launch/simplified_localization.launch.py',
-            'launch/wheelchair_localization.launch.py'
+            'launch/wheelchair_localization.launch.py',
+            'launch/wheelchair_global_localization.launch.py',
         ]),
     ],
     install_requires=['setuptools'],
