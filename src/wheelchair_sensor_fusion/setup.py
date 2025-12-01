@@ -39,6 +39,8 @@ setup(
             'yolo_detector_node = wheelchair_sensor_fusion.yolo_detector_node:main',
             'lidar_processor_node = wheelchair_sensor_fusion.lidar_processor_node:main',
             'obstacle_publisher_node = wheelchair_sensor_fusion.obstacle_publisher_node:main',
+            'adaptive_fusion_node = wheelchair_sensor_fusion.adaptive_fusion_node:main',
+            'safety_monitor_node = wheelchair_sensor_fusion.safety_monitor_node:main',
         ],
     },
 )

@@ -1,0 +1,94 @@
+# ============================================================================
+# DEPTH CAMERA POINTCLOUD FILTER CONFIGURATION
+# ============================================================================
+# Preprocessing for RealSense D455 depth data before costmap integration
+# Filters: voxel downsampling, range limits, statistical outlier removal
+# ============================================================================
+
+pointcloud_filter_node:
+  ros__parameters:
+    # Input/Output topics
+    input_topic: "/camera/depth/color/points"
+    output_topic: "/camera/depth/points_filtered"
+
+    # Frame configuration
+    target_frame: "base_link"          # Transform to robot frame
+    source_frame: "camera_depth_optical_frame"
+
+    # ========================================================================
+    # VOXEL GRID FILTER - Downsample for efficiency
+    # ========================================================================
+    # D455 produces ~300k points at 640x480
+    # Downsample to ~30k for real-time processing
+    voxel_filter:
+      enabled: true
+      leaf_size_x: 0.03              # 3cm voxels
+      leaf_size_y: 0.03
+      leaf_size_z: 0.03
+
+    # ========================================================================
+    # PASSTHROUGH FILTER - Range and height limits
+    # ========================================================================
+    passthrough_filter:
+      enabled: true
+      # X-axis (forward from camera)
+      x_min: 0.3                     # 30cm minimum (avoid noise near camera)
+      x_max: 5.0                     # 5m maximum (indoor range)
+      # Y-axis (left-right)
+      y_min: -2.0                    # 2m left
+      y_max: 2.0                     # 2m right
+      # Z-axis (height) - CRITICAL for wheelchair
+      z_min: 0.10                    # 10cm above ground (filter floor)
+      z_max: 1.80                    # 1.8m max (above seated user)
+
+    # ========================================================================
+    # STATISTICAL OUTLIER REMOVAL - Remove noise
+    # ========================================================================
+    statistical_filter:
+      enabled: true
+      mean_k: 30                     # Number of neighbors to analyze
+      stddev_mul_thresh: 1.0         # Std dev multiplier threshold
+
+    # ========================================================================
+    # RADIUS OUTLIER REMOVAL - Remove isolated points
+    # ========================================================================
+    radius_filter:
+      enabled: true
+      radius_search: 0.08            # 8cm search radius
+      min_neighbors: 5               # Minimum neighbors to keep point
+
+    # ========================================================================
+    # CROPPING - Remove wheelchair body
+    # ========================================================================
+    crop_box:
+      enabled: true
+      # Box to REMOVE (wheelchair footprint)
+      min_x: -0.40
+      max_x: 0.50
+      min_y: -0.40
+      max_y: 0.40
+      min_z: -0.10
+      max_z: 1.50
+      negative: true                 # Remove points INSIDE box
+
+    # ========================================================================
+    # OUTPUT CONFIGURATION
+    # ========================================================================
+    output:
+      publish_rate: 15.0             # Hz (match D455 depth rate)
+      queue_size: 5
+
+# ============================================================================
+# PROCESSING PIPELINE
+# ============================================================================
+# 1. Receive raw pointcloud from D455 (~300k points)
+# 2. Transform to base_link frame
+# 3. Voxel downsample to ~30k points
+# 4. Passthrough filter for range/height limits
+# 5. Statistical outlier removal
+# 6. Radius outlier removal
+# 7. Crop wheelchair body
+# 8. Publish filtered cloud for STVL
+#
+# Expected: 10x reduction in points, removal of floor/ceiling/noise
+# ============================================================================
