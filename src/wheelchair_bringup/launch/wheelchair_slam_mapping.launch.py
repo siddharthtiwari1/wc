@@ -53,7 +53,7 @@ def generate_launch_description():
     default_slam_config = os.path.join(
         wheelchair_localization_dir,
         'config',
-        'slam_toolbox_v14r25_FINAL.yaml',  # SOURCE CODE VERIFIED - FINAL CONFIG
+        'slam_toolbox_v14r26_NOCLUTTER.yaml',  # v14r25 params + laser filter
     )
     # Detect ROS distro for compatibility
     ros_distro = os.environ.get('ROS_DISTRO', 'jazzy')
@@ -225,6 +225,29 @@ def generate_launch_description():
             )
         ]),
         launch_arguments={'inverted': 'true'}.items(),  # CRITICAL FIX: S3 requires inverted=true
+        condition=UnlessCondition(is_sim)
+    )
+
+    # ========================================================================
+    # LASER FILTER - REMOVES CLUTTER/NOISE BEFORE SLAM
+    # ========================================================================
+    # Pipeline: /scan (raw) -> laser_filter -> /scan_filtered -> SLAM
+    laser_filter_config = os.path.join(
+        wheelchair_localization_dir,
+        'config',
+        'laser_filter.yaml',
+    )
+
+    laser_filter_node = Node(
+        package='laser_filters',
+        executable='scan_to_scan_filter_chain',
+        name='laser_filter',
+        output='screen',
+        parameters=[laser_filter_config],
+        remappings=[
+            ('scan', '/scan'),
+            ('scan_filtered', '/scan_filtered'),
+        ],
         condition=UnlessCondition(is_sim)
     )
 
@@ -463,6 +486,7 @@ def generate_launch_description():
         unified_wheelchair_launch,
         wheelchair_sensors_launch,
         rplidar_s3_launch,
+        laser_filter_node,  # Filter /scan -> /scan_filtered
 
         # Localization
         static_transform_publisher,

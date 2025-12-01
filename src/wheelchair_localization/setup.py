@@ -11,14 +11,18 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/config', [
+            # Laser filter config
+            'config/laser_filter.yaml',
             # EKF sensor fusion configs
             'config/ekf.yaml',
             'config/ekf_global.yaml',
             # VIO configs (Visual-Inertial-Encoder Odometry)
             'config/ekf_vo_imu.yaml',
             'config/ekf_vio_complete.yaml',
-            # SLAM Toolbox mapping config (PRODUCTION - SOURCE CODE VERIFIED)
+            # SLAM Toolbox mapping configs
             'config/slam_toolbox_v14r25_FINAL.yaml',
+            'config/slam_toolbox_v14r26_NOCLUTTER.yaml',
+            'config/slam_toolbox_s3_max.yaml',
             # AMCL localization configs
             'config/amcl.yaml',
             'config/amcl_v1.yaml',
