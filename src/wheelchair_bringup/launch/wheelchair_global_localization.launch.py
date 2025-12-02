@@ -28,7 +28,7 @@ import subprocess
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, TimerAction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction, TimerAction
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -384,22 +384,10 @@ def generate_launch_description():
     # RVIZ VISUALIZATION
     # ========================================================================
 
-    # RViz launches with a delay to ensure topics and transforms are available
-    # Only launch if use_rviz is true (default)
-    rviz_node = TimerAction(
-        period=11.0,  # Wait for AMCL and all sensors to be ready
-        actions=[
-            Node(
-                package='rviz2',
-                executable='rviz2',
-                name='rviz2',
-                output='screen',
-                arguments=['-d', default_rviz_config],
-                parameters=[{'use_sim_time': is_sim}],
-                additional_env={'DISPLAY': ':1'},
-                condition=IfCondition(use_rviz),
-            )
-        ],
+    # RViz visualization - launches immediately using ExecuteProcess
+    rviz_node = ExecuteProcess(
+        cmd=['rviz2', '-d', default_rviz_config],
+        output='screen',
     )
 
     # ========================================================================
