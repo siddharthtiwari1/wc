@@ -291,13 +291,10 @@ hardware_interface::return_type WheelchairInterface::read(const rclcpp::Time &ti
     return hardware_interface::return_type::ERROR;
   }
 
-  // Check for command timeout
-  if (isCommandStale(time))
-  {
-    RCLCPP_WARN(rclcpp::get_logger("WheelchairInterface"),
-                "Command timeout detected, applying emergency stop");
-    applyEmergencyStop();
-  }
+  // NOTE: Command timeout check removed - bumperbot doesn't have this and it causes
+  // false emergency stops. The diff_drive_controller handles its own cmd_vel_timeout.
+  // If needed, the timeout should be checked in write() AFTER commands are processed,
+  // not in read() before write() has a chance to update last_command_time_.
 
   // Read data from Arduino using final_control protocol
   if (motor_controller_->IsDataAvailable())
@@ -518,43 +515,39 @@ hardware_interface::return_type WheelchairInterface::write(const rclcpp::Time &t
     return hardware_interface::return_type::ERROR;
   }
 
-  // Update last command time using consistent clock
-  last_command_time_ = clock_.now();
+  // FIXED: Match bumperbot's simple approach - no emergency stop logic here
+  // The diff_drive_controller handles cmd_vel_timeout on its own
 
-  // Check safety limits
-  checkSafetyLimits();
-
-  // Apply emergency stop if active
-  if (emergency_stop_active_)
-  {
-    wheel_velocity_commands_[0] = 0.0;
-    wheel_velocity_commands_[1] = 0.0;
-  }
-
-  // FIXED: Correct joint mapping for Arduino commands
   // wheel_velocity_commands_[0] = leftwheel (from diff_drive_controller)
   // wheel_velocity_commands_[1] = rightwheel (from diff_drive_controller)
   double left_cmd = wheel_velocity_commands_[0];   // leftwheel
   double right_cmd = wheel_velocity_commands_[1];  // rightwheel
 
-  // Format command using final_control Arduino protocol
-  // Arduino expects: rp5.0,lp3.0, (wheel mode)
+  // Format command using bumperbot's exact format (with zero padding for values < 10)
+  // Arduino expects: rp05.00,lp03.00,
   std::stringstream cmd_stream;
 
-  // Right wheel command
-  cmd_stream << "r" << (right_cmd >= 0 ? "p" : "n")
-             << std::fixed << std::setprecision(1) << std::abs(right_cmd)
-             << ",";
+  char right_wheel_sign = right_cmd >= 0 ? 'p' : 'n';
+  char left_wheel_sign = left_cmd >= 0 ? 'p' : 'n';
 
-  // Left wheel command
-  cmd_stream << "l" << (left_cmd >= 0 ? "p" : "n")
-             << std::fixed << std::setprecision(1) << std::abs(left_cmd)
-             << ",";
+  // Add leading zero for values < 10 (matches bumperbot)
+  std::string compensate_zeros_right = std::abs(right_cmd) < 10.0 ? "0" : "";
+  std::string compensate_zeros_left = std::abs(left_cmd) < 10.0 ? "0" : "";
 
-  if (!sendCommand(cmd_stream.str()))
+  cmd_stream << std::fixed << std::setprecision(2)
+             << "r" << right_wheel_sign << compensate_zeros_right << std::abs(right_cmd)
+             << ",l" << left_wheel_sign << compensate_zeros_left << std::abs(left_cmd) << ",";
+
+  try
   {
-    RCLCPP_ERROR(rclcpp::get_logger("WheelchairInterface"),
-                 "Failed to send velocity command: %s", cmd_stream.str().c_str());
+    motor_controller_->Write(cmd_stream.str());
+    // Note: bumperbot doesn't call DrainWriteBuffer, trying without it
+  }
+  catch (...)
+  {
+    RCLCPP_ERROR_STREAM(rclcpp::get_logger("WheelchairInterface"),
+                        "Something went wrong while sending the message "
+                            << cmd_stream.str() << " to the port " << port_);
     return hardware_interface::return_type::ERROR;
   }
 
