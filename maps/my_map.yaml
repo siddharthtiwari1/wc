@@ -1,5 +1,5 @@
 image: my_map.pgm
-mode: trinary
+mode: raw
 resolution: 0.020
 origin: [-11.284, -4.007, 0]
 negate: 0

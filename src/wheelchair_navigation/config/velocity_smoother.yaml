@@ -1,0 +1,23 @@
+# =============================================================================
+# VELOCITY SMOOTHER - Passenger Comfort
+# =============================================================================
+# Smooth velocity transitions for comfortable wheelchair ride
+# =============================================================================
+
+velocity_smoother:
+  ros__parameters:
+    use_sim_time: false
+    smoothing_frequency: 20.0
+    scale_velocities: false
+    feedback: "OPEN_LOOP"
+
+    # Wheelchair comfort limits
+    max_velocity: [0.35, 0.0, 0.6]          # [linear_x, linear_y, angular_z]
+    min_velocity: [-0.15, 0.0, -0.6]        # Allow slow reverse
+    max_accel: [0.25, 0.0, 1.0]             # Gentle acceleration
+    max_decel: [-0.35, 0.0, -1.5]           # Moderate deceleration
+
+    odom_topic: "/odometry/filtered"
+    odom_duration: 0.1
+    deadband_velocity: [0.01, 0.0, 0.01]
+    velocity_timeout: 1.0
