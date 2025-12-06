@@ -31,7 +31,7 @@ Usage:
 import os
 import subprocess
 
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import get_package_share_directory, get_package_prefix
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, TimerAction, ExecuteProcess
 from launch.conditions import IfCondition, UnlessCondition
@@ -113,7 +113,7 @@ def generate_launch_description():
     )
     declare_rviz = DeclareLaunchArgument(
         'rviz',
-        default_value='true',
+        default_value='false',
         description='Launch RViz for visualization.',
     )
     declare_rviz_config = DeclareLaunchArgument(
@@ -130,6 +130,26 @@ def generate_launch_description():
         'test_type',
         default_value='square',
         description='Test type: square, square_enhanced, or lshape',
+    )
+    declare_log_folder = DeclareLaunchArgument(
+        'log_folder',
+        default_value='/home/sidd/wc/src/data_logs',
+        description='Root folder for data logging.',
+    )
+    declare_log_category = DeclareLaunchArgument(
+        'log_category',
+        default_value='odometry',
+        description='Category subfolder: mapping, localization, navigation, odometry, calibration.',
+    )
+    declare_log_frequency = DeclareLaunchArgument(
+        'log_frequency',
+        default_value='10.0',
+        description='Logging frequency in Hz.',
+    )
+    declare_session_name = DeclareLaunchArgument(
+        'session_name',
+        default_value='',
+        description='Optional session name suffix for log folder.',
     )
 
     # Get launch configurations
@@ -186,6 +206,7 @@ def generate_launch_description():
     )
 
     # Hardware sensor pipeline (RealSense + IMU filtering/republisher + RViz)
+    # standalone=false because unified_wheelchair.launch.py already provides robot_state_publisher
     wheelchair_sensors_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             os.path.join(
@@ -202,6 +223,7 @@ def generate_launch_description():
             'unite_imu_method': LaunchConfiguration('unite_imu_method'),
             'rviz': LaunchConfiguration('rviz'),
             'rviz_config': LaunchConfiguration('rviz_config'),
+            'standalone': 'false',  # unified_wheelchair provides robot_state_publisher
         }.items(),
         condition=UnlessCondition(is_sim)
     )
@@ -215,6 +237,43 @@ def generate_launch_description():
                 'rplidar_s3_launch.py',
             )
         ]),
+        launch_arguments={'inverted': 'true'}.items(),  # S3 requires inverted=true
+        condition=UnlessCondition(is_sim)
+    )
+
+    # ========================================================================
+    # LASER FILTER - INDUSTRIAL 8-STAGE PIPELINE
+    # ========================================================================
+    # Pipeline: /scan (raw) -> laser_filter -> /scan_filtered
+    # Stages: range, intensity, angular, box, shadow, speckle, temporal, speckle_fine
+    laser_filter_config = os.path.join(
+        wheelchair_localization_dir,
+        'config',
+        'laser_filter_industrial.yaml',
+    )
+
+    laser_filter_node = Node(
+        package='laser_filters',
+        executable='scan_to_scan_filter_chain',
+        name='laser_filter',
+        output='screen',
+        parameters=[laser_filter_config],
+        remappings=[
+            ('scan', '/scan'),
+            ('scan_filtered', '/scan_filtered'),
+        ],
+        condition=UnlessCondition(is_sim)
+    )
+
+    # Bridge RPLidar frame (publishes as 'laser') to URDF frame ('lidar')
+    # 180 deg rotation to correct backward scan orientation
+    lidar_to_laser_transform = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        arguments=["--x", "0", "--y", "0", "--z", "0",
+                   "--qx", "0", "--qy", "0", "--qz", "1", "--qw", "0",
+                   "--frame-id", "lidar",
+                   "--child-frame-id", "laser"],
         condition=UnlessCondition(is_sim)
     )
 
@@ -255,32 +314,6 @@ def generate_launch_description():
         ]
     )
 
-    # Global EKF: Fuses local odometry + SLAM (drift-free global pose)
-    ekf_global_node = TimerAction(
-        period=10.0,  # Wait for SLAM to initialize
-        actions=[
-            Node(
-                package='robot_localization',
-                executable='ekf_node',
-                name='ekf_global_node',
-                output='screen',
-                parameters=[
-                    os.path.join(
-                        get_package_share_directory('wheelchair_localization'),
-                        'config',
-                        'ekf_global.yaml',
-                    ),
-                    {
-                        'use_sim_time': is_sim,
-                    }
-                ],
-                remappings=[
-                    ('/odometry/filtered', '/odometry/global')
-                ]
-            )
-        ],
-        condition=UnlessCondition(is_sim)
-    )
 
     # ========================================================================
     # PATH TESTING/PLOTTING (SQUARE or L-SHAPE)
@@ -347,21 +380,32 @@ def generate_launch_description():
     )
 
     # ========================================================================
-    # DATA LOGGER
+    # TOPIC DATA LOGGER (IMU + Raw Odom + EKF Filtered Odom)
     # ========================================================================
+    # Logs single CSV with: wall_time, imu data, raw odom, filtered odom
+    # Output: /home/sidd/wc/src/data_logs/ekf_odom_<timestamp>.csv
 
-    topic_data_logger = Node(
-        package='scripts',
-        executable='topic_data_logger',
-        name='topic_data_logger',
-        output='screen',
-        parameters=[{
-            'imu_topic': '/imu',
-            'raw_odom_topic': '/wc_control/odom',
-            'filtered_odom_topic': '/odometry/filtered',
-            'log_frequency_hz': 10.0,
-            'file_prefix': 'wheelchair_data_log'
-        }]
+    topic_data_logger = TimerAction(
+        period=8.0,  # Wait for EKF and sensors to be ready
+        actions=[
+            Node(
+                package='scripts',
+                # Use explicit path to prefer this workspace over other overlays
+                executable=os.path.join(
+                    get_package_prefix('scripts'),
+                    'lib', 'scripts', 'topic_data_logger'
+                ),
+                name='topic_data_logger',
+                output='screen',
+                parameters=[{
+                    'imu_topic': '/imu',
+                    'raw_odom_topic': '/wc_control/odom',
+                    'filtered_odom_topic': '/odometry/filtered',
+                    'log_frequency_hz': LaunchConfiguration('log_frequency'),
+                    'file_prefix': 'full_system',
+                }]
+            )
+        ]
     )
 
     # ========================================================================
@@ -398,6 +442,10 @@ def generate_launch_description():
         declare_rviz_config,
         declare_enable_plotting,
         declare_test_type,
+        declare_log_folder,
+        declare_log_category,
+        declare_log_frequency,
+        declare_session_name,
 
         # USB permissions (hardware only)
         permission_setup,
@@ -407,15 +455,15 @@ def generate_launch_description():
         wheelchair_sensors_launch,
         rplidar_s3_launch,
 
+        # Laser filtering pipeline: /scan -> /scan_filtered
+        laser_filter_node,
+        lidar_to_laser_transform,
+
         # Localization
         static_transform_publisher,
         ekf_local_node,
-        ekf_global_node,
 
-        # Visualization and plotting
-        square_path_plotter,
-        lshape_path_plotter,
-        square_enhanced_plotter,
-        topic_data_logger,
+        # Data logging to /home/sidd/wc/src/data_logs/
+        topic_data_logger,  # IMU + Raw Odom + EKF Filtered Odom logger
         rviz_node,
     ])

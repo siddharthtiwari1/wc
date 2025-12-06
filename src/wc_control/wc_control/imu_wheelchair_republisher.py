@@ -169,11 +169,20 @@ class ImuWheelchairRepublisher(Node):
 
         self.declare_parameter('input_topic', '/imu/data')
         self.declare_parameter('output_topic', '/imu')
-        self.declare_parameter('output_frame', 'imu')
+        # Publish in base_link frame so EKF doesn't need to re-transform
+        self.declare_parameter('output_frame', 'base_link')
         self.declare_parameter('source_frame', 'camera_imu_optical_frame')
         self.declare_parameter('target_frame', 'base_link')
         self.declare_parameter('zero_on_start', True)
+        # Prefer TF to stay in sync with URDF; hardcoded quaternion is only a fallback
         self.declare_parameter('use_tf', True)
+
+        # Hardcoded quaternion from URDF: camera_imu_optical_frame -> base_link
+        # Format: [x, y, z, w]
+        self.declare_parameter('orientation_quaternion', [0.5, -0.5, 0.5, 0.5])
+
+        # Gyro bias correction in base_link frame
+        self.declare_parameter('gyro_z_bias', 0.0)  # rad/s
 
         self._input_topic = self.get_parameter('input_topic').get_parameter_value().string_value
         self._output_topic = self.get_parameter('output_topic').get_parameter_value().string_value
@@ -182,13 +191,30 @@ class ImuWheelchairRepublisher(Node):
         self._target_frame = self.get_parameter('target_frame').get_parameter_value().string_value
         self._zero_on_start = self.get_parameter('zero_on_start').get_parameter_value().bool_value
         self._use_tf = self.get_parameter('use_tf').get_parameter_value().bool_value
+        self._gyro_z_bias = self.get_parameter('gyro_z_bias').get_parameter_value().double_value
+
+        # Get hardcoded quaternions
+        ori_quat = self.get_parameter('orientation_quaternion').get_parameter_value().double_array_value
 
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
 
+        # Initialize transform variables (will be set by TF lookup or hardcoded values)
         self._R_sensor_to_base: Optional[np.ndarray] = None
         self._q_sensor_to_base: Optional[QuaternionTuple] = None
         self._q_base_to_sensor: Optional[QuaternionTuple] = None
+
+        # If not using TF, set up hardcoded quaternion immediately
+        if not self._use_tf:
+            # orientation_quaternion is sensor -> base_link (from URDF)
+            self._q_sensor_to_base = tuple(ori_quat)
+            self._q_base_to_sensor = _quaternion_conjugate(self._q_sensor_to_base)
+            self._R_sensor_to_base = _quat_to_rotation_matrix(self._q_sensor_to_base)
+            self.get_logger().info(
+                f'Using hardcoded quaternions:\n'
+                f'  Sensor->base quat: {self._q_sensor_to_base}\n'
+                f'  Rotation matrix:\n{self._R_sensor_to_base}'
+            )
 
         self._initial_orientation: Optional[QuaternionTuple] = None
         self._initial_orientation_inv: Optional[QuaternionTuple] = None
@@ -202,7 +228,8 @@ class ImuWheelchairRepublisher(Node):
 
         self.get_logger().info(
             f'Republishing IMU {self._input_topic} -> {self._output_topic} '
-            f'using TF to transform from {self._source_frame} to {self._target_frame}'
+            f'using {"TF" if self._use_tf else "hardcoded quaternion"} to transform from {self._source_frame} to {self._target_frame}. '
+            f'Gyro Z bias correction: {self._gyro_z_bias:.6f} rad/s'
         )
 
     def _lookup_transform(self) -> bool:
@@ -215,6 +242,8 @@ class ImuWheelchairRepublisher(Node):
             )
 
             q = tf_stamped.transform.rotation
+            # lookup_transform(target, source) returns the transform FROM source TO target
+            # So this is sensor_to_base (camera_imu_optical_frame → base_link)
             self._q_sensor_to_base = (q.x, q.y, q.z, q.w)
             self._q_base_to_sensor = _quaternion_conjugate(self._q_sensor_to_base)
             self._R_sensor_to_base = _quat_to_rotation_matrix(self._q_sensor_to_base)
@@ -222,8 +251,8 @@ class ImuWheelchairRepublisher(Node):
             if not self._tf_warned:
                 self.get_logger().info(
                     f'TF lookup successful: {self._source_frame} -> {self._target_frame}\n'
-                    f'Quaternion: [{q.x:.3f}, {q.y:.3f}, {q.z:.3f}, {q.w:.3f}]\n'
-                    f'Rotation matrix:\n{self._R_sensor_to_base}'
+                    f'Sensor->Base quat: [{q.x:.3f}, {q.y:.3f}, {q.z:.3f}, {q.w:.3f}]\n'
+                    f'Rotation matrix (sensor->base):\n{self._R_sensor_to_base}'
                 )
                 self._tf_warned = True
 
@@ -284,7 +313,8 @@ class ImuWheelchairRepublisher(Node):
             angular_base = self._R_sensor_to_base @ angular_sensor
             republished.angular_velocity.x = float(angular_base[0])
             republished.angular_velocity.y = float(angular_base[1])
-            republished.angular_velocity.z = float(angular_base[2])
+            # Apply gyro Z bias correction to reduce yaw drift
+            republished.angular_velocity.z = float(angular_base[2]) - self._gyro_z_bias
         else:
             republished.angular_velocity = msg.angular_velocity
 
@@ -307,30 +337,33 @@ class ImuWheelchairRepublisher(Node):
         else:
             republished.linear_acceleration = msg.linear_acceleration
 
-        # Fix orientation covariance - input is often all zeros
-        if all(np.isfinite(msg.orientation_covariance)) and any(c != 0.0 for c in msg.orientation_covariance):
-            # Rotate non-zero covariance matrix
-            republished.orientation_covariance = _rotate_covariance(
-                self._q_base_to_sensor, list(msg.orientation_covariance)
-            )
+        # Handle orientation covariance
+        if all(np.isfinite(msg.orientation_covariance)):
+            ori_cov = list(msg.orientation_covariance)
+            if _is_isotropic_covariance(ori_cov):
+                # If all zeros, provide a reasonable default (~3 deg std dev)
+                if all(c == 0.0 for c in ori_cov):
+                    orientation_variance = 0.0025  # (0.05 rad)^2
+                    republished.orientation_covariance = [
+                        orientation_variance, 0.0, 0.0,
+                        0.0, orientation_variance, 0.0,
+                        0.0, 0.0, orientation_variance
+                    ]
+                else:
+                    republished.orientation_covariance = ori_cov
+            else:
+                republished.orientation_covariance = _rotate_covariance(
+                    self._q_sensor_to_base, ori_cov
+                )
         else:
-            # Provide realistic orientation covariance when input is zero/invalid
-            # Standard deviation: ~0.05 rad (~3 degrees) for RealSense IMU
-            orientation_variance = 0.0025  # (0.05 rad)^2
-            republished.orientation_covariance = [
-                orientation_variance, 0.0, 0.0,
-                0.0, orientation_variance, 0.0,
-                0.0, 0.0, orientation_variance
-            ]
+            republished.orientation_covariance = msg.orientation_covariance
 
         # Handle angular velocity covariance
         if all(np.isfinite(msg.angular_velocity_covariance)):
             ang_vel_cov = list(msg.angular_velocity_covariance)
-            # If covariance is isotropic (diagonal with equal values), no rotation needed
             if _is_isotropic_covariance(ang_vel_cov):
                 republished.angular_velocity_covariance = ang_vel_cov
             else:
-                # Rotate non-isotropic covariance
                 republished.angular_velocity_covariance = _rotate_covariance(
                     self._q_sensor_to_base, ang_vel_cov
                 )
@@ -344,7 +377,7 @@ class ImuWheelchairRepublisher(Node):
             if _is_isotropic_covariance(lin_acc_cov):
                 republished.linear_acceleration_covariance = lin_acc_cov
             else:
-                # Rotate non-isotropic covariance
+                # Rotate non-isotropic covariance using sensor->base quaternion
                 republished.linear_acceleration_covariance = _rotate_covariance(
                     self._q_sensor_to_base, lin_acc_cov
                 )

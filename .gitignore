@@ -24,3 +24,29 @@ log/
 # IDE
 .vscode/
 .idea/
+
+# Temporary analysis scripts (one-off debugging)
+*_analysis.py
+calibration_analysis.py
+comparative_analysis.py
+complete_system_analysis.py
+deeper_analysis.py
+final_diagnosis.py
+focused_analysis.py
+forward_motion_impact.py
+root_cause_analysis.py
+sign_chain_analysis.py
+
+# Generated images/plots
+*.png
+
+# GraphViz files
+*.gv
+*.pdf
+
+# Datasets folder (large files)
+datasets/
+
+# Map backups
+maps/*_original.pgm
+maps/*_clean.pgm

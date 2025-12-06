@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
 """
-Log /imu, /wc_control/odom, and /odometry/filtered streams to a single CSV file.
+Log /imu, /camera/imu (raw), /wc_control/odom, and /odometry/filtered streams to a single CSV file.
 
 Each row contains:
     - wall clock timestamp
-    - latest IMU orientation/angular velocity/linear acceleration
+    - latest IMU orientation/angular velocity/linear acceleration (transformed to base_link)
+    - latest RAW camera IMU angular velocity (in camera_imu_optical_frame - for bias calibration)
     - latest raw odometry pose/twist (from wc_control)
     - latest EKF fused odometry pose/twist
 """
@@ -38,6 +39,14 @@ class ImuSnapshot:
 
 
 @dataclass
+class RawImuSnapshot:
+    """Raw camera IMU data (in camera_imu_optical_frame) for bias calibration."""
+    stamp: float
+    angular_velocity: tuple  # gyro X, Y, Z in camera frame
+    linear_acceleration: tuple
+
+
+@dataclass
 class OdomSnapshot:
     stamp: float
     position: tuple
@@ -51,6 +60,7 @@ class MultiTopicLogger(Node):
         super().__init__('multi_topic_logger')
 
         self.declare_parameter('imu_topic', '/imu')
+        self.declare_parameter('raw_camera_imu_topic', '/camera/imu')  # Raw camera IMU for bias calibration
         self.declare_parameter('raw_odom_topic', '/wc_control/odom')
         self.declare_parameter('filtered_odom_topic', '/odometry/filtered')
         self.declare_parameter('log_frequency_hz', 10.0)
@@ -58,6 +68,7 @@ class MultiTopicLogger(Node):
         self.declare_parameter('file_prefix', 'imu_ekf_log')
 
         self._imu_topic = self.get_parameter('imu_topic').get_parameter_value().string_value
+        self._raw_camera_imu_topic = self.get_parameter('raw_camera_imu_topic').get_parameter_value().string_value
         self._raw_odom_topic = self.get_parameter('raw_odom_topic').get_parameter_value().string_value
         self._filtered_odom_topic = self.get_parameter('filtered_odom_topic').get_parameter_value().string_value
         log_frequency = self.get_parameter('log_frequency_hz').get_parameter_value().double_value
@@ -69,15 +80,20 @@ class MultiTopicLogger(Node):
         if output_path:
             self._csv_path = Path(output_path).expanduser()
         else:
-            self._csv_path = Path(os.getcwd()) / f'{file_prefix}_{timestamp}.csv'
+            # Default to data_logs folder with timestamped filename
+            log_dir = Path('/home/sidd/wc/src/data_logs')
+            log_dir.mkdir(parents=True, exist_ok=True)
+            self._csv_path = log_dir / f'{file_prefix}_{timestamp}.csv'
         self._csv_path.parent.mkdir(parents=True, exist_ok=True)
 
         qos = QoSPresetProfiles.SENSOR_DATA.value
         self.create_subscription(Imu, self._imu_topic, self._imu_callback, qos)
+        self.create_subscription(Imu, self._raw_camera_imu_topic, self._raw_camera_imu_callback, qos)
         self.create_subscription(Odometry, self._raw_odom_topic, self._raw_odom_callback, qos)
         self.create_subscription(Odometry, self._filtered_odom_topic, self._filtered_odom_callback, qos)
 
         self._imu_snapshot: Optional[ImuSnapshot] = None
+        self._raw_camera_imu_snapshot: Optional[RawImuSnapshot] = None
         self._raw_odom_snapshot: Optional[OdomSnapshot] = None
         self._filtered_odom_snapshot: Optional[OdomSnapshot] = None
 
@@ -89,6 +105,10 @@ class MultiTopicLogger(Node):
             'imu_orientation_x', 'imu_orientation_y', 'imu_orientation_z', 'imu_orientation_w',
             'imu_ang_vel_x', 'imu_ang_vel_y', 'imu_ang_vel_z',
             'imu_lin_acc_x', 'imu_lin_acc_y', 'imu_lin_acc_z',
+            # Raw camera IMU (in camera_imu_optical_frame - for bias calibration)
+            'raw_cam_imu_stamp',
+            'raw_cam_imu_ang_vel_x', 'raw_cam_imu_ang_vel_y', 'raw_cam_imu_ang_vel_z',
+            'raw_cam_imu_lin_acc_x', 'raw_cam_imu_lin_acc_y', 'raw_cam_imu_lin_acc_z',
             'raw_stamp',
             'raw_pos_x', 'raw_pos_y', 'raw_pos_z',
             'raw_orientation_x', 'raw_orientation_y', 'raw_orientation_z', 'raw_orientation_w',
@@ -110,6 +130,14 @@ class MultiTopicLogger(Node):
         self._imu_snapshot = ImuSnapshot(
             stamp=_stamp_to_float(msg.header.stamp),
             orientation=(msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w),
+            angular_velocity=(msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z),
+            linear_acceleration=(msg.linear_acceleration.x, msg.linear_acceleration.y, msg.linear_acceleration.z),
+        )
+
+    def _raw_camera_imu_callback(self, msg: Imu) -> None:
+        """Capture raw camera IMU data for bias calibration."""
+        self._raw_camera_imu_snapshot = RawImuSnapshot(
+            stamp=_stamp_to_float(msg.header.stamp),
             angular_velocity=(msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z),
             linear_acceleration=(msg.linear_acceleration.x, msg.linear_acceleration.y, msg.linear_acceleration.z),
         )
@@ -138,8 +166,15 @@ class MultiTopicLogger(Node):
 
         now = self.get_clock().now().nanoseconds / 1e9
         imu = self._imu_snapshot
+        raw_cam = self._raw_camera_imu_snapshot
         raw = self._raw_odom_snapshot
         filt = self._filtered_odom_snapshot
+
+        # Handle case where raw camera IMU is not yet available
+        if raw_cam:
+            raw_cam_data = [raw_cam.stamp, *raw_cam.angular_velocity, *raw_cam.linear_acceleration]
+        else:
+            raw_cam_data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
         row = [
             now,
@@ -147,6 +182,7 @@ class MultiTopicLogger(Node):
             *imu.orientation,
             *imu.angular_velocity,
             *imu.linear_acceleration,
+            *raw_cam_data,
             raw.stamp,
             *raw.position,
             *raw.orientation,
@@ -176,7 +212,11 @@ def main(args=None) -> None:
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        try:
+            rclpy.shutdown()
+        except Exception:
+            # Shutdown may already be in progress (e.g., global Ctrl+C)
+            pass
 
 
 if __name__ == '__main__':

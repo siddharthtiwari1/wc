@@ -26,12 +26,13 @@ setup(
         'imu_out_to_imu = scripts.imu_out_to_imu:main',
         'sim_odom_bias = scripts.sim_odom_bias:main',
         'topic_data_logger = scripts.topic_data_logger:main',
+        'mapping_data_logger = scripts.mapping_data_logger:main',
         # Active test scripts - KEEP
         'square_path_ekf_tester = scripts.square_path_ekf_tester:main',
         'l_shape_odometry_test.py = scripts.l_shape_odometry_test:main',
-        'square_odometry_test_enhanced.py = scripts.square_odometry_test_enhanced:main'
-        # Removed redundant plotter/analyzer scripts (ekf_comparison_plotter, wheelchair_odom_plotter,
-        # odom_comparison_plotter, odom_comparison_plotter_l_shape, imu_odom_transformer, square_odometry_test)
+        'square_odometry_test_enhanced.py = scripts.square_odometry_test_enhanced:main',
+        # Data analysis
+        'analyze_imu_odometry_log = scripts.analyze_imu_odometry_log:main',
         ],
     },
 )

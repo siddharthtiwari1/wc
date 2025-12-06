@@ -57,13 +57,18 @@ def generate_launch_description():
     )
     declare_rviz = DeclareLaunchArgument(
         'rviz',
-        default_value='true',
+        default_value='false',
         description='Launch RViz for visualization.',
     )
     declare_rviz_config = DeclareLaunchArgument(
         'rviz_config',
         default_value=default_rviz_config,
         description='RViz configuration file.',
+    )
+    declare_standalone = DeclareLaunchArgument(
+        'standalone',
+        default_value='true',
+        description='If true, launch robot_state_publisher. Set false when included from another launch.',
     )
 
     robot_description = ParameterValue(
@@ -78,6 +83,8 @@ def generate_launch_description():
         value_type=str,
     )
 
+    # Only launch robot_state_publisher in standalone mode
+    # When included from wheelchair_full_system.launch.py, unified_wheelchair provides this
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
@@ -87,6 +94,7 @@ def generate_launch_description():
             'robot_description': robot_description,
             'use_sim_time': LaunchConfiguration('use_sim_time'),
         }],
+        condition=IfCondition(LaunchConfiguration('standalone')),
     )
 
     joint_state_actions = []
@@ -98,6 +106,7 @@ def generate_launch_description():
             executable='joint_state_publisher_gui',
             name='joint_state_publisher_gui',
             output='screen',
+            condition=IfCondition(LaunchConfiguration('standalone')),
         )
     except PackageNotFoundError:
         try:
@@ -108,6 +117,7 @@ def generate_launch_description():
                 executable='joint_state_publisher',
                 name='joint_state_publisher',
                 output='screen',
+                condition=IfCondition(LaunchConfiguration('standalone')),
             )
         except PackageNotFoundError:
             joint_state_actions.append(LogInfo(msg='No joint state publisher package found; continuing without joint publisher.'))
@@ -134,6 +144,38 @@ def generate_launch_description():
         }.items(),
     )
 
+    # ========================================================================
+    # IMU PROCESSING PIPELINE
+    # ========================================================================
+    # 1. imu_bias_corrector: Applies gyro bias correction to raw IMU
+    #    /camera/imu -> /camera/imu_corrected
+    # 2. imu_filter_madgwick: Fuses accel+gyro into orientation
+    #    /camera/imu_corrected -> /imu/data
+    # 3. imu_wheelchair_republisher: Transforms to base_link frame
+    #    /imu/data -> /imu
+    # ========================================================================
+
+    # Step 1: Apply gyro bias correction BEFORE Madgwick filter
+    # Bias values from 2025-12-06 static calibration (126 second test)
+    imu_bias_corrector = Node(
+        package='wc_control',
+        executable='imu_bias_corrector.py',
+        name='imu_bias_corrector',
+        output='screen',
+        parameters=[{
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
+            'input_topic': '/camera/imu',
+            'output_topic': '/camera/imu_corrected',
+            # Gyro bias values in camera frame (rad/s)
+            # From static test 2025-12-06 17:38 (full_system_20251206_173829.csv)
+            # DIRECT raw camera IMU measurements from 1044-second static test
+            'gyro_x_bias': -0.004302,
+            'gyro_y_bias': 0.000787,
+            'gyro_z_bias': 0.000948,
+        }],
+    )
+
+    # Step 2: Madgwick filter - now reads from corrected topic
     imu_filter = Node(
         package='imu_filter_madgwick',
         executable='imu_filter_madgwick_node',
@@ -145,9 +187,13 @@ def generate_launch_description():
             'publish_tf': False,
             'use_sim_time': LaunchConfiguration('use_sim_time'),
         }],
-        remappings=[('imu/data_raw', '/camera/imu')],
+        remappings=[('imu/data_raw', '/camera/imu_corrected')],
     )
 
+    # Step 3: Transform to base_link frame + apply gyro Z bias in base_link frame
+    # Using hardcoded quaternions (from original github launch file) - NOT TF lookup
+    # orientation_quaternion: [0.5, -0.5, 0.5, 0.5] - for orientation transform
+    # vector_quaternion: [0.5, 0.5, 0.5, 0.5] - for angular velocity/linear acceleration
     imu_wheelchair_republisher = Node(
         package='wc_control',
         executable='imu_wheelchair_republisher.py',
@@ -157,10 +203,14 @@ def generate_launch_description():
             'use_sim_time': LaunchConfiguration('use_sim_time'),
             'input_topic': '/imu/data',
             'output_topic': '/imu',
-            'output_frame': 'imu',
-            'orientation_quaternion': [0.5, -0.5, 0.5, 0.5],
-            'vector_quaternion': [0.5, 0.5, 0.5, 0.5],
+            'output_frame': 'base_link',
             'zero_on_start': True,
+            # Use TF to stay in sync with robot_description; fallback quaternion is still available
+            'use_tf': True,
+            'orientation_quaternion': [0.5, -0.5, 0.5, 0.5],
+            # Gyro Z bias in BASE_LINK frame (measured from 2025-12-06 static test)
+            # Applied in bias corrector before Madgwick; set to zero here to avoid double-biasing
+            'gyro_z_bias': 0.0,  # rad/s - will be subtracted from measurement
         }],
     )
 
@@ -181,10 +231,12 @@ def generate_launch_description():
         declare_unite_imu,
         declare_rviz,
         declare_rviz_config,
+        declare_standalone,
         robot_state_publisher,
         *joint_state_actions,
         *( [joint_state_publisher] if joint_state_publisher else [] ),
         realsense_launch,
+        imu_bias_corrector,
         imu_filter,
         imu_wheelchair_republisher,
         rviz_node,

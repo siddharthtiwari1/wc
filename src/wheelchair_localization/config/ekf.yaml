@@ -47,11 +47,12 @@ ekf_filter_node:
       # - IMU: Yaw orientation and yaw angular velocity - stable orientation
       # - NO IMU ACCELERATION: too noisy for position estimation
       # Order: x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
+      # Original: IMU yaw + yaw rate; no IMU position/accel
       imu0_config: [false, false, false,    # x, y, z position (not from IMU)
-                    false, false, true,     # roll, pitch, yaw (only yaw for 2D)
-                    false, false, false,    # x_vel, y_vel, z_vel (from odometry)
-                    false, false, true,     # roll_vel, pitch_vel, yaw_vel (only yaw_vel from IMU)
-                    false, false, false]    # NO ACCELERATION - too noisy, causes drift
+                    false, false, true,     # yaw orientation from IMU
+                    false, false, false,    # x_vel, y_vel, z_vel
+                    false, false, true,     # yaw_vel from IMU
+                    false, false, false]    # accelerations off
 
       imu0_differential: false  # Use absolute values since republisher handles zeroing
       imu0_relative: false
@@ -70,11 +71,12 @@ ekf_filter_node:
       # Wheels provide: x, y position and x velocity (what they're good at)
       # IMU provides: yaw orientation (what it's good at)
       # Order: x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
-      odom0_config: [true,  true,  false,    # x, y position - accurate from wheel encoders
-                     false, false, false,    # NO YAW from wheels - prevents drift!
-                     true,  false, false,    # x_vel from wheels for smooth integration
-                     false, false, false,    # angular velocities (from IMU)
-                     false, false, false]    # accelerations (none)
+      # Original: x,y and x_vel from wheels; yaw/yaw_vel off
+      odom0_config: [true,  true,  false,    # x, y position from wheels
+                     false, false, false,    # yaw orientation off
+                     true,  false, false,    # x_vel from wheels
+                     false, false, false,    # yaw_vel off
+                     false, false, false]    # accelerations off
 
       # [ADVANCED] When measuring one pose variable with two sensors, a situation can arise in which both sensors under-
       # report their covariances. This can lead to the filter rapidly jumping back and forth between each measurement as they

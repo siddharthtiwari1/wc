@@ -29,6 +29,10 @@ ament_python_install_package(${PROJECT_NAME})
 install(PROGRAMS
   # Only keep the actively used IMU republisher
   ${PROJECT_NAME}/imu_wheelchair_republisher.py
+  # IMU bias corrector (applies bias correction before Madgwick filter)
+  ${PROJECT_NAME}/imu_bias_corrector.py
+  # IMU calibrator (runtime gyro bias estimation)
+  ${PROJECT_NAME}/imu_calibrator.py
   DESTINATION lib/${PROJECT_NAME}
 )
 # Removed redundant scripts: simple_serial_transmitter, simple_serial_receiver,
