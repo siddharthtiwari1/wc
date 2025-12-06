@@ -31,8 +31,8 @@ install(PROGRAMS
   ${PROJECT_NAME}/imu_wheelchair_republisher.py
   # IMU bias corrector (applies bias correction before Madgwick filter)
   ${PROJECT_NAME}/imu_bias_corrector.py
-  # IMU calibrator (runtime gyro bias estimation)
-  ${PROJECT_NAME}/imu_calibrator.py
+  # IMU startup calibrator (measures gyro bias at startup)
+  ${PROJECT_NAME}/imu_startup_calibrator.py
   DESTINATION lib/${PROJECT_NAME}
 )
 # Removed redundant scripts: simple_serial_transmitter, simple_serial_receiver,

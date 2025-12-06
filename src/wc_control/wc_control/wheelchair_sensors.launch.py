@@ -147,16 +147,41 @@ def generate_launch_description():
     # ========================================================================
     # IMU PROCESSING PIPELINE
     # ========================================================================
+    # 0. imu_startup_calibrator: Measures gyro bias at startup (3 seconds)
+    #    Publishes to /imu/calibrated_bias for dynamic bias update
     # 1. imu_bias_corrector: Applies gyro bias correction to raw IMU
     #    /camera/imu -> /camera/imu_corrected
+    #    (subscribes to /imu/calibrated_bias for dynamic updates)
     # 2. imu_filter_madgwick: Fuses accel+gyro into orientation
     #    /camera/imu_corrected -> /imu/data
     # 3. imu_wheelchair_republisher: Transforms to base_link frame
     #    /imu/data -> /imu
     # ========================================================================
 
+    # Step 0: Startup calibration - measures current gyro bias
+    # IMPORTANT: Wheelchair must be stationary for first 3 seconds after boot
+    imu_startup_calibrator = Node(
+        package='wc_control',
+        executable='imu_startup_calibrator.py',
+        name='imu_startup_calibrator',
+        output='screen',
+        parameters=[{
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
+            'input_topic': '/camera/imu',
+            'bias_topic': '/imu/calibrated_bias',
+            'status_topic': '/imu/calibration_status',
+            'calibration_duration': 3.0,  # seconds
+            'min_samples': 100,
+            'max_motion_threshold': 0.05,  # rad/s
+            # Default bias values (fallback if calibration fails)
+            'default_gyro_x_bias': -0.004302,
+            'default_gyro_y_bias': 0.000787,
+            'default_gyro_z_bias': 0.000948,
+        }],
+    )
+
     # Step 1: Apply gyro bias correction BEFORE Madgwick filter
-    # Bias values from 2025-12-06 static calibration (126 second test)
+    # Starts with default static calibration values, updates when startup calibration completes
     imu_bias_corrector = Node(
         package='wc_control',
         executable='imu_bias_corrector.py',
@@ -166,9 +191,10 @@ def generate_launch_description():
             'use_sim_time': LaunchConfiguration('use_sim_time'),
             'input_topic': '/camera/imu',
             'output_topic': '/camera/imu_corrected',
-            # Gyro bias values in camera frame (rad/s)
+            'calibrated_bias_topic': '/imu/calibrated_bias',
+            # Default gyro bias values in camera frame (rad/s)
             # From static test 2025-12-06 17:38 (full_system_20251206_173829.csv)
-            # DIRECT raw camera IMU measurements from 1044-second static test
+            # Will be overridden by startup calibrator if successful
             'gyro_x_bias': -0.004302,
             'gyro_y_bias': 0.000787,
             'gyro_z_bias': 0.000948,
@@ -236,6 +262,7 @@ def generate_launch_description():
         *joint_state_actions,
         *( [joint_state_publisher] if joint_state_publisher else [] ),
         realsense_launch,
+        imu_startup_calibrator,  # Must start before bias corrector to publish bias
         imu_bias_corrector,
         imu_filter,
         imu_wheelchair_republisher,

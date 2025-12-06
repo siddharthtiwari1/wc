@@ -286,9 +286,84 @@ Note: Clockwise had higher error due to bias drift between tests (demonstrates b
 
 ---
 
+## Startup Calibration (NEW - 2025-12-06)
+
+The system now includes automatic startup calibration to handle day-to-day bias variations:
+
+### How It Works
+
+1. **At system boot**, `imu_startup_calibrator` collects raw IMU data for 3 seconds
+2. **Wheelchair must be stationary** during this period (user naturally waits after powering on)
+3. **Computes current bias** from collected samples
+4. **Publishes to `/imu/calibrated_bias`** (latched topic)
+5. **`imu_bias_corrector` receives update** and uses fresh calibration values
+
+### Pipeline Diagram
+
+```
+                    ┌─────────────────────────────┐
+                    │  imu_startup_calibrator     │
+                    │  (3 second calibration)     │
+                    └─────────────┬───────────────┘
+                                  │
+                    /imu/calibrated_bias (latched)
+                                  │
+/camera/imu ──────────────────────▼────────────────────┐
+       │                    ┌─────────────────────────┐│
+       └───────────────────>│   imu_bias_corrector    ││
+                            │ (subtracts calibrated   ││
+                            │  bias in camera frame)  ││
+                            └───────────┬─────────────┘│
+                                        │              │
+                            /camera/imu_corrected      │
+                                        │              │
+                            ┌───────────▼─────────────┐│
+                            │  imu_filter_madgwick    ││
+                            └───────────┬─────────────┘│
+                                        │              │
+                                /imu/data              │
+                                        │              │
+                            ┌───────────▼─────────────┐│
+                            │ imu_wheelchair_         ││
+                            │ republisher (transform) ││
+                            └───────────┬─────────────┘│
+                                        │              │
+                                    /imu (base_link)   │
+                                        │              │
+                            ┌───────────▼─────────────┐│
+                            │   robot_localization    ││
+                            │   (EKF)                 ││
+                            └─────────────────────────┘│
+```
+
+### Topics
+
+| Topic | Type | Description |
+|-------|------|-------------|
+| `/imu/calibrated_bias` | Vector3Stamped | Calibrated gyro bias (X, Y, Z in camera frame) |
+| `/imu/calibration_status` | Bool | True if calibration succeeded |
+
+### Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `calibration_duration` | 3.0 | Seconds to collect data |
+| `min_samples` | 100 | Minimum samples for valid calibration |
+| `max_motion_threshold` | 0.05 | rad/s - rejects calibration if motion detected |
+
+### Fallback Behavior
+
+If startup calibration fails (motion detected, not enough samples), the system falls back to default static calibration values:
+- `gyro_x_bias`: -0.004302 rad/s
+- `gyro_y_bias`: 0.000787 rad/s
+- `gyro_z_bias`: 0.000948 rad/s
+
+---
+
 ## Next Steps / Future Improvements
 
-1. [ ] Implement startup auto-calibration (5-second static period)
+1. [x] ~~Implement startup auto-calibration (5-second static period)~~ **DONE**
 2. [ ] Add ZUPT detection for bias recalibration during stops
-3. [ ] Configure EKF online bias estimation
-4. [ ] Temperature compensation (if temp sensor available)
+3. [ ] Temperature compensation (if temp sensor available)
+
+**Note**: EKF online bias estimation was investigated but `robot_localization` does not support gyro bias as a state variable. Startup calibration is the industry-standard alternative.
